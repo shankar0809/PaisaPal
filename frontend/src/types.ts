@@ -22,3 +22,17 @@ export type ImportCommit = {
   batch_id: number;
   imported_count: number;
 };
+
+export type WatchlistRow = {
+  id: number;
+  ticker: string;
+  current_price: number;
+  final_decision: string;
+  confidence: string;
+  technical_rating: string;
+  fundamental_rating: string;
+  sentiment_rating: string;
+  options_flow_rating: string;
+  risk_reward: number | null;
+  created_at: string;
+};

@@ -1,5 +1,6 @@
 import { BarChart3, FileUp, History } from "lucide-react";
 import { useEffect, useState } from "react";
+import { DashboardPage } from "./pages/DashboardPage";
 import { ImportPage } from "./pages/ImportPage";
 
 type Route = "dashboard" | "import" | "history";
@@ -39,14 +40,7 @@ export function App() {
         </nav>
       </aside>
       <main className="content">
-        {route === "dashboard" && (
-          <section className="page">
-            <header className="pageHeader">
-              <h1>Dashboard</h1>
-            </header>
-            <div className="panel emptyState">Import a CSV watchlist to start analyzing tickers.</div>
-          </section>
-        )}
+        {route === "dashboard" && <DashboardPage />}
         {route === "import" && <ImportPage />}
         {route === "history" && (
           <section className="page">
