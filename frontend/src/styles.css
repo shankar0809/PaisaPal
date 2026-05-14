@@ -87,6 +87,54 @@ select {
   color: #5b6572;
 }
 
+.formPanel,
+.previewGrid {
+  display: grid;
+  gap: 14px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field label {
+  font-weight: 650;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+button {
+  background: #18324a;
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  min-height: 38px;
+  padding: 8px 14px;
+}
+
+button:disabled {
+  background: #aeb8c3;
+  cursor: not-allowed;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+td,
+th {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 10px;
+  text-align: left;
+}
+
 @media (max-width: 760px) {
   .appShell {
     grid-template-columns: 1fr;
