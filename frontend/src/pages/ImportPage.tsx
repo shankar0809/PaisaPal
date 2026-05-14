@@ -5,6 +5,9 @@ export function ImportPage() {
     <main className="page">
       <header className="pageHeader">
         <h1>CSV Import</h1>
+        <a className="buttonLink" href="/api/sample-csv">
+          Sample CSV
+        </a>
       </header>
       <CsvImportPanel />
     </main>

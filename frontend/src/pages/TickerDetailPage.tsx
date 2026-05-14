@@ -22,7 +22,15 @@ export function TickerDetailPage({ ticker }: TickerDetailPageProps) {
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load ticker report"));
   }, [ticker]);
 
-  if (error) return <main className="page"><div className="panel" role="alert">{error}</div></main>;
+  if (error) {
+    return (
+      <main className="page">
+        <div className="panel" role="alert">
+          No analysis found for this ticker.
+        </div>
+      </main>
+    );
+  }
   if (!report) return <main className="page"><div className="panel emptyState">Loading report...</div></main>;
 
   const input = report.report.input;
