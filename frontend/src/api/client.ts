@@ -1,4 +1,4 @@
-import type { ImportCommit, ImportPreview, WatchlistRow } from "../types";
+import type { HistoryRow, ImportCommit, ImportPreview, TickerReport, WatchlistRow } from "../types";
 
 export async function previewImport(file: File): Promise<ImportPreview> {
   const formData = new FormData();
@@ -22,5 +22,17 @@ export async function fetchWatchlist(params = new URLSearchParams()): Promise<Wa
   const query = params.toString();
   const response = await fetch(`/api/watchlist${query ? `?${query}` : ""}`);
   if (!response.ok) throw new Error("Failed to load watchlist");
+  return response.json();
+}
+
+export async function fetchTickerReport(ticker: string): Promise<TickerReport> {
+  const response = await fetch(`/api/tickers/${encodeURIComponent(ticker)}`);
+  if (!response.ok) throw new Error("Failed to load ticker report");
+  return response.json();
+}
+
+export async function fetchTickerHistory(ticker: string): Promise<HistoryRow[]> {
+  const response = await fetch(`/api/tickers/${encodeURIComponent(ticker)}/history`);
+  if (!response.ok) throw new Error("Failed to load ticker history");
   return response.json();
 }

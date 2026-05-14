@@ -187,6 +187,45 @@ th {
   color: #384556;
 }
 
+.detailHeader {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.buttonLink {
+  background: #18324a;
+  border-radius: 8px;
+  color: #ffffff;
+  padding: 9px 14px;
+}
+
+.reportSection {
+  display: grid;
+  gap: 10px;
+}
+
+.reportSection h2 {
+  font-size: 18px;
+  margin: 0;
+}
+
+dl {
+  display: grid;
+  gap: 8px 16px;
+  grid-template-columns: minmax(140px, 220px) 1fr;
+  margin: 0;
+}
+
+dt {
+  color: #5b6572;
+  font-weight: 650;
+}
+
+dd {
+  margin: 0;
+}
+
 @media (max-width: 760px) {
   .appShell {
     grid-template-columns: 1fr;

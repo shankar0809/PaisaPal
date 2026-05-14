@@ -36,3 +36,22 @@ export type WatchlistRow = {
   risk_reward: number | null;
   created_at: string;
 };
+
+export type TickerReport = {
+  ticker: string;
+  report: {
+    input: Record<string, unknown>;
+    analysis: Record<string, unknown>;
+  };
+  markdown_report: string;
+  created_at: string;
+};
+
+export type HistoryRow = {
+  id: number;
+  ticker: string;
+  final_decision: string;
+  confidence: string;
+  risk_reward: number | null;
+  created_at: string;
+};
