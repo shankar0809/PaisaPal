@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from datetime import datetime
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -121,6 +122,26 @@ def update_analysis_run_status(
     return run
 
 
+def update_analysis_run_status_from_jobs(session: Session, run_id: int) -> AnalysisRun:
+    run = session.get(AnalysisRun, run_id)
+    if run is None:
+        raise ValueError(f"Analysis run {run_id} was not found")
+
+    statuses = set(
+        session.scalars(select(AnalysisJob.status).where(AnalysisJob.run_id == run_id))
+    )
+    if statuses == {"complete"}:
+        run.status = "complete"
+    elif statuses == {"failed"}:
+        run.status = "failed"
+    elif statuses == {"complete", "failed"}:
+        run.status = "partial"
+
+    session.commit()
+    session.refresh(run)
+    return run
+
+
 def update_job_status(
     session: Session,
     job_id: int,
@@ -136,6 +157,16 @@ def update_job_status(
     session.commit()
     session.refresh(job)
     return job
+
+
+def _parse_source_retrieved_at(value) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    raise TypeError("retrieved_at must be a datetime or ISO timestamp string")
 
 
 def save_analysis_report(
@@ -179,17 +210,23 @@ def save_analysis_report(
     session.execute(delete(SourceSnapshot).where(SourceSnapshot.job_id == job.id))
 
     for snapshot in source_snapshots:
+        source_kwargs = {
+            "job_id": job.id,
+            "ticker": ticker,
+            "provider": snapshot.get("provider", ""),
+            "source_type": snapshot.get("source_type", ""),
+            "status": snapshot.get("status", ""),
+            "label": snapshot.get("label", ""),
+            "url": snapshot.get("url"),
+            "payload_json": json.dumps(snapshot.get("payload", {})),
+            "warnings_json": json.dumps(snapshot.get("warnings", [])),
+        }
+        retrieved_at = _parse_source_retrieved_at(snapshot.get("retrieved_at"))
+        if retrieved_at is not None:
+            source_kwargs["retrieved_at"] = retrieved_at
         session.add(
             SourceSnapshot(
-                job_id=job.id,
-                ticker=ticker,
-                provider=snapshot.get("provider", ""),
-                source_type=snapshot.get("source_type", ""),
-                status=snapshot.get("status", ""),
-                label=snapshot.get("label", ""),
-                url=snapshot.get("url"),
-                payload_json=json.dumps(snapshot.get("payload", {})),
-                warnings_json=json.dumps(snapshot.get("warnings", [])),
+                **source_kwargs,
             )
         )
 

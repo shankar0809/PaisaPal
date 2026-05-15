@@ -4,8 +4,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from paisapal.api import routes
 from paisapal.api.routes import get_session
 from paisapal.db.base import Base
+from paisapal.db.repository import update_job_status
 from paisapal.main import app
 
 
@@ -93,3 +95,20 @@ def test_run_mock_analysis_completes_run_jobs_and_creates_report(client):
         item["label"] for item in report["report"]["source_summary"]
     } >= {"Mock market snapshot for NVDA"}
     assert report["report"]["data_warnings"] == ["Mock report; do not use for decisions"]
+
+
+def test_run_mock_analysis_marks_run_partial_when_jobs_are_mixed(client, monkeypatch):
+    class MixedOutcomeOrchestrator:
+        def run_job(self, session, job):
+            status = "complete" if job.ticker == "NVDA" else "failed"
+            update_job_status(session, job.id, status)
+
+    monkeypatch.setattr(routes, "AnalysisOrchestrator", MixedOutcomeOrchestrator)
+    created = client.post("/api/analysis-runs", json={"tickers": "NVDA, TSLA"}).json()
+
+    response = client.post(f"/api/analysis-runs/{created['id']}/run-mock")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "partial"
+    assert [job["status"] for job in body["jobs"]] == ["complete", "failed"]

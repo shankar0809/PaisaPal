@@ -1,5 +1,6 @@
 import json
 import warnings
+from datetime import datetime, timezone
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.exc import SAWarning
@@ -17,6 +18,8 @@ from paisapal.db.repository import (
     get_latest_report,
     get_latest_watchlist,
     save_analysis_report,
+    update_analysis_run_status_from_jobs,
+    update_job_status,
 )
 
 
@@ -195,3 +198,72 @@ def test_save_analysis_report_replaces_existing_report_for_job():
     assert reports[0].final_decision == "Buy / Enter"
     assert len(sources) == 1
     assert sources[0].provider == "mock-updated"
+
+
+def test_update_analysis_run_status_from_jobs_marks_partial_for_mixed_outcomes():
+    session = session_factory()
+    run = create_analysis_run(session, ["NVDA", "TSLA"], 100000, 0.5, None, "")
+    update_job_status(session, run.jobs[0].id, "complete")
+    update_job_status(session, run.jobs[1].id, "failed")
+
+    updated = update_analysis_run_status_from_jobs(session, run.id)
+
+    assert updated.status == "partial"
+
+
+def test_update_analysis_run_status_from_jobs_marks_failed_when_all_jobs_fail():
+    session = session_factory()
+    run = create_analysis_run(session, ["NVDA", "TSLA"], 100000, 0.5, None, "")
+    for job in run.jobs:
+        update_job_status(session, job.id, "failed")
+
+    updated = update_analysis_run_status_from_jobs(session, run.id)
+
+    assert updated.status == "failed"
+
+
+def test_save_analysis_report_persists_source_retrieved_at_from_snapshot():
+    session = session_factory()
+    run = create_analysis_run(session, ["NVDA"], 100000, 0.5, None, "")
+    job = run.jobs[0]
+    retrieved_at = "2026-01-02T03:04:05+00:00"
+
+    save_analysis_report(
+        session,
+        job_id=job.id,
+        report={
+            "ticker": "NVDA",
+            "company_name": "NVIDIA Corporation",
+            "current_price": 211.5,
+            "final_classification": "Watchlist",
+            "confidence": "Medium",
+            "technical_rating": "Constructive",
+            "fundamental_rating": "Very strong",
+            "earnings_rating": "Strong",
+            "sentiment_rating": "Bullish but crowded",
+            "options_flow_rating": "Call-heavy",
+            "risk_reward": 2.1,
+            "source_summary": [],
+            "markdown_report": "# NVIDIA Corporation (NVDA) - Stock Analysis Report",
+        },
+        source_snapshots=[
+            {
+                "provider": "mock",
+                "source_type": "market",
+                "status": "fresh",
+                "label": "Mock market data",
+                "url": None,
+                "payload": {"price": 211.5},
+                "warnings": [],
+                "retrieved_at": retrieved_at,
+            }
+        ],
+    )
+
+    source = session.scalar(
+        select(SourceSnapshot).where(SourceSnapshot.job_id == job.id)
+    )
+    assert source is not None
+    assert source.retrieved_at.replace(tzinfo=timezone.utc) == datetime.fromisoformat(
+        retrieved_at
+    )

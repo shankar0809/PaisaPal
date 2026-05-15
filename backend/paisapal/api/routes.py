@@ -32,7 +32,7 @@ from paisapal.db.repository import (
     get_history,
     get_latest_report,
     get_latest_watchlist,
-    update_analysis_run_status,
+    update_analysis_run_status_from_jobs,
 )
 
 router = APIRouter()
@@ -110,7 +110,7 @@ def run_mock_analysis(run_id: int, session: Session = Depends(get_session)) -> A
     orchestrator = AnalysisOrchestrator()
     for job in run.jobs:
         orchestrator.run_job(session, job)
-    update_analysis_run_status(session, run_id, "complete")
+    update_analysis_run_status_from_jobs(session, run_id)
     refreshed = get_analysis_run(session, run_id)
     if refreshed is None:
         raise HTTPException(status_code=404, detail="Analysis run not found")

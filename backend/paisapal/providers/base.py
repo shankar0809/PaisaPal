@@ -29,6 +29,7 @@ class EvidenceSnapshot:
             "url": self.url,
             "payload": self.payload,
             "warnings": self.warnings,
+            "retrieved_at": self.retrieved_at,
         }
 
 
