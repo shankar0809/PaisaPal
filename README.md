@@ -37,7 +37,7 @@ Enter one or more tickers from the Analyze screen. PaisaPal creates one job for 
 8. Options Flow / Implied Move
 9. Final View
 
-Provider keys are optional for local UI development. When `ALPHA_VANTAGE_API_KEY` is set, the live run collects Alpha Vantage daily price, company overview, earnings, and news sentiment evidence. When `FMP_API_KEY` is set, the live run collects Financial Modeling Prep company profile, financial statements, ratios, health scores, and earnings evidence. When no market-data keys are configured, the app falls back to mock evidence so the UI remains usable.
+Provider keys are optional for local UI development. When `ALPHA_VANTAGE_API_KEY` is set, the live run collects Alpha Vantage daily price, company overview, earnings, and news sentiment evidence. When `FMP_API_KEY` is set, the live run collects Financial Modeling Prep company profile, financial statements, ratios, health scores, and earnings evidence. When `POLYGON_API_KEY` is set, the live run collects Polygon stock snapshots, daily bars, technical summaries, and options-chain evidence. When no market-data keys are configured, the app falls back to mock evidence so the UI remains usable.
 
 Use the regular **Run Analysis** action for configured live providers and GPT commentary. The backend still exposes `/api/analysis-runs/{run_id}/run-mock` for deterministic local testing.
 
@@ -64,6 +64,7 @@ The backend stores local data in `paisapal.sqlite`. This database is ignored by 
 - Provider availability status
 - Alpha Vantage evidence for market data, fundamentals, earnings, and news sentiment
 - Financial Modeling Prep evidence for fundamentals, financial statements, ratios, health scores, and earnings
+- Polygon evidence for stock snapshots, technical daily bars, and options chains
 - Mock evidence fallback for keyless local development
 - GPT-5.5 report validation and prompt assembly
 - Watchlist dashboard
