@@ -1,3 +1,5 @@
+from datetime import date
+
 from paisapal.providers.alpha_vantage import AlphaVantageProvider
 from paisapal.providers.base import EvidenceSnapshot
 from paisapal.providers.fmp import FmpProvider
@@ -46,6 +48,28 @@ class FakeFmpClient:
         endpoint = url.rsplit("/", 1)[-1]
         self.calls.append({"url": url, "endpoint": endpoint, "params": params, "timeout": timeout})
         return FakeFmpResponse(self.payloads[endpoint])
+
+
+class FakePolygonResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def json(self):
+        return self.payload
+
+    def raise_for_status(self):
+        return None
+
+
+class FakePolygonClient:
+    def __init__(self, payloads):
+        self.payloads = payloads
+        self.calls = []
+
+    def get(self, url, *, params, timeout):
+        path = url.removeprefix("https://api.polygon.io")
+        self.calls.append({"url": url, "path": path, "params": params, "timeout": timeout})
+        return FakePolygonResponse(self.payloads[path])
 
 
 def test_mock_provider_returns_all_core_evidence_types():
@@ -332,4 +356,124 @@ def test_fmp_provider_returns_error_snapshot_for_provider_warning():
     assert evidence[0].source_type == "provider_status"
     assert evidence[0].status == "error"
     assert evidence[0].payload["endpoint"] == "profile"
+    assert evidence[0].warnings == ["Invalid API key"]
+
+
+def test_polygon_provider_collects_live_evidence_snapshots():
+    bars = [
+        {"t": index, "o": 100.0 + index, "h": 102.0 + index, "l": 99.0 + index, "c": 101.0 + index, "v": 1_500_000}
+        for index in range(30)
+    ]
+    http_client = FakePolygonClient(
+        {
+            "/v3/reference/tickers/NVDA": {
+                "status": "OK",
+                "results": {
+                    "ticker": "NVDA",
+                    "name": "NVIDIA Corporation",
+                    "market": "stocks",
+                    "primary_exchange": "XNAS",
+                    "type": "CS",
+                    "market_cap": 5_000_000_000,
+                    "sic_description": "Semiconductors",
+                },
+            },
+            "/v3/snapshot": {
+                "status": "OK",
+                "results": [
+                    {
+                        "ticker": "NVDA",
+                        "session": {
+                            "price": 130.0,
+                            "change": 2.5,
+                            "change_percent": 1.96,
+                            "volume": 2_000_000,
+                            "previous_close": 127.5,
+                        },
+                        "last_trade": {"price": 130.1, "sip_timestamp": 1_779_000_000_000_000_000},
+                    }
+                ],
+            },
+            "/v2/aggs/ticker/NVDA/range/1/day/2026-01-15/2026-05-15": {
+                "status": "OK",
+                "results": bars,
+            },
+            "/v3/snapshot/options/NVDA": {
+                "status": "OK",
+                "results": [
+                    {
+                        "details": {
+                            "ticker": "O:NVDA260620C00130000",
+                            "contract_type": "call",
+                            "strike_price": 130.0,
+                            "expiration_date": "2026-06-20",
+                        },
+                        "implied_volatility": 0.55,
+                        "open_interest": 12_000,
+                        "break_even_price": 138.5,
+                        "greeks": {"delta": 0.62, "gamma": 0.02, "theta": -0.05, "vega": 0.18},
+                        "day": {"change": 1.1, "change_percent": 4.2, "volume": 5_000},
+                        "underlying_asset": {"price": 130.0},
+                    }
+                ],
+            },
+        }
+    )
+    provider = PolygonProvider(api_key="demo-key", http_client=http_client, end_date=date(2026, 5, 15))
+
+    evidence = provider.collect("NVDA")
+
+    assert {item.source_type for item in evidence} == {"market", "technicals", "options"}
+    assert all(item.provider == "polygon" for item in evidence)
+    assert all(item.status == "fresh" for item in evidence)
+    market = next(item for item in evidence if item.source_type == "market")
+    assert market.payload["ticker"] == "NVDA"
+    assert market.payload["name"] == "NVIDIA Corporation"
+    assert market.payload["session"]["price"] == 130.0
+    technicals = next(item for item in evidence if item.source_type == "technicals")
+    assert technicals.payload["latest_close"] == 130.0
+    assert technicals.payload["sma_20"] == 120.5
+    assert technicals.payload["range_high"] == 131.0
+    assert technicals.payload["range_low"] == 99.0
+    assert technicals.payload["average_volume"] == 1500000
+    options = next(item for item in evidence if item.source_type == "options")
+    assert options.payload["contracts"][0]["implied_volatility"] == 0.55
+    assert options.payload["contracts"][0]["open_interest"] == 12000
+    assert options.payload["contracts"][0]["delta"] == 0.62
+    assert options.payload["contracts"][0]["strike_price"] == 130.0
+    assert options.payload["contracts"][0]["expiration_date"] == "2026-06-20"
+    assert options.payload["contracts"][0]["underlying_price"] == 130.0
+
+    assert [call["path"] for call in http_client.calls] == [
+        "/v3/reference/tickers/NVDA",
+        "/v3/snapshot",
+        "/v2/aggs/ticker/NVDA/range/1/day/2026-01-15/2026-05-15",
+        "/v3/snapshot/options/NVDA",
+    ]
+    assert all(call["params"]["apiKey"] == "demo-key" for call in http_client.calls)
+    assert http_client.calls[1]["params"]["ticker"] == "NVDA"
+    assert http_client.calls[1]["params"]["type"] == "stocks"
+    assert http_client.calls[2]["params"]["adjusted"] is True
+    assert http_client.calls[2]["params"]["sort"] == "asc"
+    assert http_client.calls[2]["params"]["limit"] == 120
+    assert http_client.calls[3]["params"]["limit"] == 20
+
+
+def test_polygon_provider_returns_error_snapshot_for_provider_warning():
+    http_client = FakePolygonClient(
+        {
+            "/v3/reference/tickers/NVDA": {
+                "status": "ERROR",
+                "error": "Invalid API key",
+            }
+        }
+    )
+    provider = PolygonProvider(api_key="demo-key", http_client=http_client)
+
+    evidence = provider.collect("NVDA")
+
+    assert len(evidence) == 1
+    assert evidence[0].source_type == "provider_status"
+    assert evidence[0].status == "error"
+    assert evidence[0].payload["endpoint"] == "ticker_details"
     assert evidence[0].warnings == ["Invalid API key"]
