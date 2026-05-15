@@ -98,6 +98,23 @@ def test_run_mock_analysis_completes_run_jobs_and_creates_report(client):
     assert report["report"]["data_warnings"] == ["Mock report; do not use for decisions"]
 
 
+def test_ticker_report_includes_framework_source_coverage(client):
+    created = client.post("/api/analysis-runs", json={"tickers": "NVDA"}).json()
+    client.post(f"/api/analysis-runs/{created['id']}/run-mock")
+
+    response = client.get("/api/tickers/NVDA")
+
+    assert response.status_code == 200
+    coverage = response.json()["source_coverage"]
+    by_section = {item["section"]: item for item in coverage}
+    assert by_section["Current Stock Context"]["status"] == "covered"
+    assert by_section["VCP / Technical Pattern View"]["status"] == "partial"
+    assert by_section["Fundamental Metrics"]["status"] == "partial"
+    assert by_section["Options Flow / Implied Move"]["status"] == "covered"
+    assert by_section["Market Sentiment"]["status"] == "covered"
+    assert by_section["Current Stock Context"]["matched_sources"]
+
+
 def test_run_mock_analysis_always_uses_mock_provider(client, monkeypatch):
     captured = {}
 
@@ -174,6 +191,38 @@ def test_run_mock_analysis_marks_run_partial_when_jobs_are_mixed(client, monkeyp
     body = response.json()
     assert body["status"] == "partial"
     assert [job["status"] for job in body["jobs"]] == ["complete", "failed"]
+
+
+def test_provider_status_includes_live_readiness_metadata(client, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    monkeypatch.setenv("POLYGON_API_KEY", "polygon-key")
+    monkeypatch.delenv("ALPHA_VANTAGE_API_KEY", raising=False)
+    monkeypatch.delenv("FMP_API_KEY", raising=False)
+
+    response = client.get("/api/provider-status")
+
+    assert response.status_code == 200
+    body = response.json()
+    by_provider = {item["provider"]: item for item in body}
+    assert by_provider["openai"]["role"] == "ai"
+    assert by_provider["openai"]["required_for_live"] is True
+    assert by_provider["polygon"]["role"] == "market_data"
+    assert all(item["live_ready"] is True for item in body)
+    assert all(item["message"] == "Live AI analysis ready" for item in body)
+
+
+def test_provider_status_reports_not_ready_without_ai_or_market_data(client, monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("POLYGON_API_KEY", raising=False)
+    monkeypatch.delenv("ALPHA_VANTAGE_API_KEY", raising=False)
+    monkeypatch.delenv("FMP_API_KEY", raising=False)
+
+    response = client.get("/api/provider-status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert all(item["live_ready"] is False for item in body)
+    assert body[0]["message"] == "Configure OPENAI_API_KEY and at least one market data provider"
 
 
 def test_configured_providers_returns_alpha_vantage_when_key_is_present(monkeypatch):

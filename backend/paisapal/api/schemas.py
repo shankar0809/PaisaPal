@@ -47,6 +47,7 @@ class TickerReportResponse(BaseModel):
     report: dict
     markdown_report: str
     created_at: str
+    source_coverage: list[dict] = Field(default_factory=list)
 
 
 class HistoryRowResponse(BaseModel):
@@ -88,3 +89,7 @@ class AnalysisRunResponse(BaseModel):
 class ProviderStatusResponse(BaseModel):
     provider: str
     configured: bool
+    role: str = "market_data"
+    required_for_live: bool = False
+    live_ready: bool = False
+    message: str = ""

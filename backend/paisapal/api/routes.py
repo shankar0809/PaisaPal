@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from paisapal.ai.client import OpenAiAnalysisClient
 from paisapal.analysis.rules import analyze
 from paisapal.analysis_runs.orchestrator import AnalysisOrchestrator, configured_providers
+from paisapal.analysis_runs.source_coverage import derive_source_coverage
 from paisapal.analysis_runs.validation import parse_tickers
 from paisapal.api.schemas import (
     AnalysisRunCreateRequest,
@@ -142,17 +143,53 @@ def run_analysis(run_id: int, session: Session = Depends(get_session)) -> Analys
 
 @router.get("/provider-status", response_model=list[ProviderStatusResponse])
 def provider_status() -> list[ProviderStatusResponse]:
+    openai_configured = bool(os.getenv("OPENAI_API_KEY"))
+    provider_config = {
+        "polygon": bool(os.getenv("POLYGON_API_KEY")),
+        "alpha_vantage": bool(os.getenv("ALPHA_VANTAGE_API_KEY")),
+        "fmp": bool(os.getenv("FMP_API_KEY")),
+    }
+    has_market_data = any(provider_config.values())
+    live_ready = openai_configured and has_market_data
+    if live_ready:
+        message = "Live AI analysis ready"
+    elif not openai_configured and not has_market_data:
+        message = "Configure OPENAI_API_KEY and at least one market data provider"
+    elif not openai_configured:
+        message = "Configure OPENAI_API_KEY for live AI commentary"
+    else:
+        message = "Configure at least one market data provider"
+
     return [
         ProviderStatusResponse(
             provider="openai",
-            configured=bool(os.getenv("OPENAI_API_KEY")),
+            configured=openai_configured,
+            role="ai",
+            required_for_live=True,
+            live_ready=live_ready,
+            message=message,
         ),
-        ProviderStatusResponse(provider="polygon", configured=bool(os.getenv("POLYGON_API_KEY"))),
+        ProviderStatusResponse(
+            provider="polygon",
+            configured=provider_config["polygon"],
+            role="market_data",
+            live_ready=live_ready,
+            message=message,
+        ),
         ProviderStatusResponse(
             provider="alpha_vantage",
-            configured=bool(os.getenv("ALPHA_VANTAGE_API_KEY")),
+            configured=provider_config["alpha_vantage"],
+            role="market_data",
+            live_ready=live_ready,
+            message=message,
         ),
-        ProviderStatusResponse(provider="fmp", configured=bool(os.getenv("FMP_API_KEY"))),
+        ProviderStatusResponse(
+            provider="fmp",
+            configured=provider_config["fmp"],
+            role="fundamentals",
+            live_ready=live_ready,
+            message=message,
+        ),
     ]
 
 
@@ -232,11 +269,13 @@ def ticker_report(ticker: str, session: Session = Depends(get_session)) -> Ticke
     snapshot = get_latest_report(session, ticker)
     if snapshot is None:
         raise HTTPException(status_code=404, detail="Ticker not found")
+    report = json.loads(snapshot.report_json)
     return TickerReportResponse(
         ticker=snapshot.ticker,
-        report=json.loads(snapshot.report_json),
+        report=report,
         markdown_report=snapshot.markdown_report,
         created_at=snapshot.created_at.isoformat(),
+        source_coverage=derive_source_coverage(report),
     )
 
 
