@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from paisapal.ai.evidence_map import build_framework_evidence_map
 from paisapal.analysis_runs.models import AnalysisRunSettings
 from paisapal.providers.base import EvidenceSnapshot
 
@@ -37,15 +38,20 @@ def build_framework_prompt(
         }
         for item in evidence
     ]
+    framework_evidence_map = build_framework_evidence_map(evidence)
     return "\n".join(
         [
             f"Run the PaisaPal investment framework for ticker {ticker}.",
             "Use the supplied evidence first. Use web research only for recent context and citations.",
-            "Return structured JSON matching the AiReportOutput schema and include full Markdown.",
+            "Return valid JSON matching the AiReportOutput schema and include full Markdown.",
+            "Use source-backed commentary in every framework section.",
+            "If evidence is missing or weak, say so explicitly in the relevant section and data_warnings.",
+            "Do not invent confidence, options flow, earnings strength, or technical signals when source evidence is missing.",
             "The Markdown report must use these sections:",
             json.dumps(REPORT_SECTIONS),
             "Final classification must be one of: Buy / Enter, Watchlist, Wait for Pullback, Avoid, Reduce, Exit.",
             f"User risk settings: {settings.model_dump_json()}",
+            f"Framework evidence map: {json.dumps(framework_evidence_map)}",
             f"Evidence: {json.dumps(evidence_payload)}",
         ]
     )

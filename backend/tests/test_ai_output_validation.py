@@ -1,6 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
+from paisapal.ai.evidence_map import build_framework_evidence_map
 from paisapal.ai.prompts import build_framework_prompt
 from paisapal.ai.schemas import validate_ai_report
 from paisapal.analysis_runs.models import AnalysisRunSettings
@@ -74,3 +75,52 @@ def test_build_framework_prompt_includes_evidence_urls():
     )
 
     assert "https://example.com/source" in prompt
+
+
+def test_build_framework_evidence_map_groups_sources_by_framework_section():
+    evidence = [
+        EvidenceSnapshot(provider="polygon", source_type="technicals", status="fresh", label="Daily bars", payload={}),
+        EvidenceSnapshot(provider="polygon", source_type="options", status="fresh", label="Options chain", payload={}),
+        EvidenceSnapshot(provider="fmp", source_type="ratios", status="fresh", label="Ratios", payload={}),
+        EvidenceSnapshot(provider="alpha_vantage", source_type="news_sentiment", status="fresh", label="News", payload={}),
+        EvidenceSnapshot(
+            provider="alpha_vantage",
+            source_type="provider_status",
+            status="error",
+            label="Rate limit",
+            payload={},
+            warnings=["rate limited"],
+        ),
+    ]
+
+    evidence_map = build_framework_evidence_map(evidence)
+
+    by_section = {section["section"]: section for section in evidence_map}
+    assert by_section["2. VCP / Technical Pattern View"]["sources"][0]["source_type"] == "technicals"
+    assert by_section["6. Fundamental Metrics"]["sources"][0]["source_type"] == "ratios"
+    assert by_section["7. Market Sentiment"]["sources"][0]["source_type"] == "news_sentiment"
+    assert by_section["8. Options Flow / Implied Move"]["sources"][0]["source_type"] == "options"
+    assert by_section["9. Final View"]["provider_warnings"][0]["warnings"] == ["rate limited"]
+
+
+def test_build_framework_prompt_includes_framework_evidence_map_and_quality_rules():
+    evidence = [
+        EvidenceSnapshot(
+            provider="polygon",
+            source_type="technicals",
+            status="fresh",
+            label="Daily bars",
+            payload={"latest_close": 130},
+        )
+    ]
+
+    prompt = build_framework_prompt(
+        ticker="NVDA",
+        settings=AnalysisRunSettings(),
+        evidence=evidence,
+    )
+
+    assert "Framework evidence map:" in prompt
+    assert "2. VCP / Technical Pattern View" in prompt
+    assert "Use source-backed commentary in every framework section" in prompt
+    assert "If evidence is missing or weak, say so explicitly" in prompt
