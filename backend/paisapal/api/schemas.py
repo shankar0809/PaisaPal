@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ImportPreviewRequest(BaseModel):
@@ -60,9 +60,9 @@ class HistoryRowResponse(BaseModel):
 
 class AnalysisRunCreateRequest(BaseModel):
     tickers: str
-    account_size: float = 100000
-    risk_percent: float = 0.5
-    max_dollar_risk: float | None = None
+    account_size: float = Field(default=100000, gt=0)
+    risk_percent: float = Field(default=0.5, gt=0, le=5)
+    max_dollar_risk: float | None = Field(default=None, gt=0)
     notes: str = ""
 
 

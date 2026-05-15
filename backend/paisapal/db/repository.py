@@ -106,6 +106,21 @@ def get_analysis_run(session: Session, run_id: int) -> AnalysisRun | None:
     return session.get(AnalysisRun, run_id)
 
 
+def update_analysis_run_status(
+    session: Session,
+    run_id: int,
+    status: str,
+) -> AnalysisRun:
+    run = session.get(AnalysisRun, run_id)
+    if run is None:
+        raise ValueError(f"Analysis run {run_id} was not found")
+
+    run.status = status
+    session.commit()
+    session.refresh(run)
+    return run
+
+
 def update_job_status(
     session: Session,
     job_id: int,
