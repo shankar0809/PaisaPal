@@ -1,19 +1,22 @@
-import { BarChart3, FileUp, History } from "lucide-react";
+import { BarChart3, History, Search } from "lucide-react";
 import { useEffect, useState } from "react";
+import { AnalyzePage } from "./pages/AnalyzePage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { HistoryPage } from "./pages/HistoryPage";
-import { ImportPage } from "./pages/ImportPage";
+import { RunProgressPage } from "./pages/RunProgressPage";
 import { TickerDetailPage } from "./pages/TickerDetailPage";
 
 type Route =
   | { name: "dashboard" }
-  | { name: "import" }
+  | { name: "analyze" }
+  | { name: "run"; runId: number }
   | { name: "history"; ticker?: string }
   | { name: "ticker"; ticker: string };
 
 function routeFromHash(): Route {
   const hash = window.location.hash.replace("#/", "");
-  if (hash === "import") return { name: "import" };
+  if (hash === "analyze") return { name: "analyze" };
+  if (hash.startsWith("runs/")) return { name: "run", runId: Number(hash.split("/")[1]) };
   if (hash.startsWith("history/")) return { name: "history", ticker: hash.split("/")[1] };
   if (hash === "history") return { name: "history" };
   if (hash.startsWith("ticker/")) return { name: "ticker", ticker: hash.split("/")[1] };
@@ -38,9 +41,9 @@ export function App() {
             <BarChart3 size={18} />
             Dashboard
           </a>
-          <a className={route.name === "import" ? "active" : ""} href="#/import">
-            <FileUp size={18} />
-            Import
+          <a className={route.name === "analyze" ? "active" : ""} href="#/analyze">
+            <Search size={18} />
+            Analyze
           </a>
           <a className={route.name === "history" ? "active" : ""} href="#/history">
             <History size={18} />
@@ -50,7 +53,8 @@ export function App() {
       </aside>
       <main className="content">
         {route.name === "dashboard" && <DashboardPage />}
-        {route.name === "import" && <ImportPage />}
+        {route.name === "analyze" && <AnalyzePage />}
+        {route.name === "run" && <RunProgressPage runId={route.runId} />}
         {route.name === "history" && <HistoryPage ticker={route.ticker} />}
         {route.name === "ticker" && <TickerDetailPage ticker={route.ticker} />}
       </main>

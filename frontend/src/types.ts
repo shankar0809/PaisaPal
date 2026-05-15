@@ -55,3 +55,27 @@ export type HistoryRow = {
   risk_reward: number | null;
   created_at: string;
 };
+
+export type AnalysisJob = {
+  id: number;
+  ticker: string;
+  status: string;
+  error_message: string | null;
+};
+
+export type AnalysisRun = {
+  id: number;
+  status: string;
+  tickers: string[];
+  account_size: number;
+  risk_percent: number;
+  max_dollar_risk: number | null;
+  notes: string;
+  created_at: string;
+  jobs: AnalysisJob[];
+};
+
+export type ProviderStatus = {
+  provider: string;
+  configured: boolean;
+};
