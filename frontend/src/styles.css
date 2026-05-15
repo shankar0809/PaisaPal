@@ -210,6 +210,19 @@ th {
   margin: 0;
 }
 
+.markdownReport {
+  background: #ffffff;
+  border: 1px solid #dfe5ec;
+  border-radius: 8px;
+  color: #1b1f24;
+  font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  margin: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 14px;
+  white-space: pre-wrap;
+}
+
 dl {
   display: grid;
   gap: 8px 16px;
