@@ -74,9 +74,9 @@ export async function fetchAnalysisRun(runId: number): Promise<AnalysisRun> {
   return response.json();
 }
 
-export async function runMockAnalysis(runId: number): Promise<AnalysisRun> {
-  const response = await fetch(`/api/analysis-runs/${runId}/run-mock`, { method: "POST" });
-  if (!response.ok) throw await errorFromResponse(response, "Failed to run mock analysis");
+export async function runAnalysis(runId: number): Promise<AnalysisRun> {
+  const response = await fetch(`/api/analysis-runs/${runId}/run`, { method: "POST" });
+  if (!response.ok) throw await errorFromResponse(response, "Failed to run analysis");
   return response.json();
 }
 

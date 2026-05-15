@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchAnalysisRun, runMockAnalysis } from "../api/client";
+import { fetchAnalysisRun, runAnalysis } from "../api/client";
 import { JobStatusTable } from "../components/JobStatusTable";
 import type { AnalysisRun } from "../types";
 
@@ -10,7 +10,7 @@ type RunProgressPageProps = {
 export function RunProgressPage({ runId }: RunProgressPageProps) {
   const [run, setRun] = useState<AnalysisRun | null>(null);
   const [error, setError] = useState("");
-  const [runningMock, setRunningMock] = useState(false);
+  const [running, setRunning] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,15 +28,15 @@ export function RunProgressPage({ runId }: RunProgressPageProps) {
     };
   }, [runId]);
 
-  async function onRunMockAnalysis() {
+  async function onRunAnalysis() {
     setError("");
-    setRunningMock(true);
+    setRunning(true);
     try {
-      setRun(await runMockAnalysis(runId));
+      setRun(await runAnalysis(runId));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to run mock analysis");
+      setError(err instanceof Error ? err.message : "Failed to run analysis");
     } finally {
-      setRunningMock(false);
+      setRunning(false);
     }
   }
 
@@ -66,8 +66,8 @@ export function RunProgressPage({ runId }: RunProgressPageProps) {
         <h1>Analysis Run #{run.id}</h1>
       </header>
       <div className="actions">
-        <button type="button" onClick={onRunMockAnalysis} disabled={runningMock}>
-          Run Mock Analysis
+        <button type="button" onClick={onRunAnalysis} disabled={running}>
+          Run Analysis
         </button>
       </div>
       {error && <p role="alert">{error}</p>}

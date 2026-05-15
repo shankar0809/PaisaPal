@@ -9,8 +9,9 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 
+from paisapal.ai.client import OpenAiAnalysisClient
 from paisapal.analysis.rules import analyze
-from paisapal.analysis_runs.orchestrator import AnalysisOrchestrator
+from paisapal.analysis_runs.orchestrator import AnalysisOrchestrator, configured_providers
 from paisapal.analysis_runs.validation import parse_tickers
 from paisapal.api.schemas import (
     AnalysisRunCreateRequest,
@@ -34,6 +35,7 @@ from paisapal.db.repository import (
     get_latest_watchlist,
     update_analysis_run_status_from_jobs,
 )
+from paisapal.providers.mock import MockProvider
 
 router = APIRouter()
 _PREVIEW_CACHE: dict[str, ParsePreview] = {}
@@ -107,7 +109,28 @@ def run_mock_analysis(run_id: int, session: Session = Depends(get_session)) -> A
     run = get_analysis_run(session, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Analysis run not found")
-    orchestrator = AnalysisOrchestrator()
+    orchestrator = AnalysisOrchestrator(providers=[MockProvider()])
+    for job in run.jobs:
+        orchestrator.run_job(session, job)
+    update_analysis_run_status_from_jobs(session, run_id)
+    refreshed = get_analysis_run(session, run_id)
+    if refreshed is None:
+        raise HTTPException(status_code=404, detail="Analysis run not found")
+    return _run_response(refreshed)
+
+
+@router.post("/analysis-runs/{run_id}/run", response_model=AnalysisRunResponse)
+def run_analysis(run_id: int, session: Session = Depends(get_session)) -> AnalysisRunResponse:
+    run = get_analysis_run(session, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Analysis run not found")
+    use_live_ai = bool(os.getenv("OPENAI_API_KEY"))
+    ai_client = OpenAiAnalysisClient() if use_live_ai else None
+    orchestrator = AnalysisOrchestrator(
+        providers=configured_providers(),
+        ai_client=ai_client,
+        use_live_ai=use_live_ai,
+    )
     for job in run.jobs:
         orchestrator.run_job(session, job)
     update_analysis_run_status_from_jobs(session, run_id)

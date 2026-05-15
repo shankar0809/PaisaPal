@@ -9,7 +9,18 @@ from paisapal.analysis_runs.models import AnalysisRunSettings
 from paisapal.analysis_runs.mock_pipeline import build_mock_report
 from paisapal.db.repository import save_analysis_report, update_job_status
 from paisapal.providers.base import MarketDataProvider
+from paisapal.providers.alpha_vantage import AlphaVantageProvider
+from paisapal.providers.fmp import FmpProvider
 from paisapal.providers.mock import MockProvider
+from paisapal.providers.polygon import PolygonProvider
+
+
+def configured_providers() -> list[MarketDataProvider]:
+    providers: list[MarketDataProvider] = []
+    for provider in [AlphaVantageProvider(), FmpProvider(), PolygonProvider()]:
+        if provider.api_key:
+            providers.append(provider)
+    return providers or [MockProvider()]
 
 
 class AnalysisOrchestrator:
