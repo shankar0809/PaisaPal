@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 
 from paisapal.analysis.rules import analyze
-from paisapal.analysis_runs.mock_pipeline import build_mock_report, build_mock_sources
+from paisapal.analysis_runs.orchestrator import AnalysisOrchestrator
 from paisapal.analysis_runs.validation import parse_tickers
 from paisapal.api.schemas import (
     AnalysisRunCreateRequest,
@@ -32,7 +32,6 @@ from paisapal.db.repository import (
     get_history,
     get_latest_report,
     get_latest_watchlist,
-    save_analysis_report,
     update_analysis_run_status,
 )
 
@@ -108,13 +107,9 @@ def run_mock_analysis(run_id: int, session: Session = Depends(get_session)) -> A
     run = get_analysis_run(session, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Analysis run not found")
+    orchestrator = AnalysisOrchestrator()
     for job in run.jobs:
-        save_analysis_report(
-            session,
-            job_id=job.id,
-            report=build_mock_report(job.ticker),
-            source_snapshots=build_mock_sources(job.ticker),
-        )
+        orchestrator.run_job(session, job)
     update_analysis_run_status(session, run_id, "complete")
     refreshed = get_analysis_run(session, run_id)
     if refreshed is None:

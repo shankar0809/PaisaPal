@@ -85,5 +85,11 @@ def test_run_mock_analysis_completes_run_jobs_and_creates_report(client):
 
     report = client.get("/api/tickers/NVDA").json()
     assert "Mock current context for NVDA" in report["markdown_report"]
-    assert report["report"]["source_summary"][0]["provider"] == "mock"
+    assert "source_summary" in report["report"]
+    assert any(
+        item["provider"] == "mock" for item in report["report"]["source_summary"]
+    )
+    assert {
+        item["label"] for item in report["report"]["source_summary"]
+    } >= {"Mock market snapshot for NVDA"}
     assert report["report"]["data_warnings"] == ["Mock report; do not use for decisions"]
