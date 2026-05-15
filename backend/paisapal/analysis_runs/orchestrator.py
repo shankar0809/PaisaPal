@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy.orm import Session
 
+from paisapal.ai.prompts import build_framework_prompt
+from paisapal.analysis_runs.models import AnalysisRunSettings
 from paisapal.analysis_runs.mock_pipeline import build_mock_report
 from paisapal.db.repository import save_analysis_report, update_job_status
 from paisapal.providers.base import MarketDataProvider
@@ -9,8 +13,15 @@ from paisapal.providers.mock import MockProvider
 
 
 class AnalysisOrchestrator:
-    def __init__(self, providers: list[MarketDataProvider] | None = None) -> None:
+    def __init__(
+        self,
+        providers: list[MarketDataProvider] | None = None,
+        ai_client: Any | None = None,
+        use_live_ai: bool = False,
+    ) -> None:
         self.providers = providers or [MockProvider()]
+        self.ai_client = ai_client
+        self.use_live_ai = use_live_ai
 
     def run_job(self, session: Session, job) -> None:
         try:
@@ -20,7 +31,17 @@ class AnalysisOrchestrator:
                 evidence.extend(provider.collect(job.ticker))
 
             update_job_status(session, job.id, "running_gpt_analysis")
-            report = build_mock_report(job.ticker)
+            if self.use_live_ai and self.ai_client is not None:
+                settings = AnalysisRunSettings(
+                    account_size=job.run.account_size,
+                    risk_percent=job.run.risk_percent,
+                    max_dollar_risk=job.run.max_dollar_risk,
+                    notes=job.run.notes,
+                )
+                prompt = build_framework_prompt(job.ticker, settings, evidence)
+                report = self.ai_client.analyze(prompt).model_dump()
+            else:
+                report = build_mock_report(job.ticker)
             report["source_summary"] = [
                 {
                     "provider": item.provider,
