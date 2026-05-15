@@ -45,16 +45,16 @@ class SourceSummary(BaseModel):
 
 class PositionSizingScenario(BaseModel):
     label: str
-    entry: float
-    stop: float
-    risk_per_share: float
-    shares_at_max_risk: int
+    entry: float = Field(gt=0)
+    stop: float = Field(gt=0)
+    risk_per_share: float = Field(gt=0)
+    shares_at_max_risk: int = Field(ge=0)
 
 
 class AiReportOutput(BaseModel):
     ticker: str
     company_name: str
-    current_price: float
+    current_price: float = Field(gt=0)
     final_classification: FinalClassification
     confidence: str
     technical_rating: str
@@ -63,7 +63,7 @@ class AiReportOutput(BaseModel):
     earnings_rating: str
     sentiment_rating: str
     options_flow_rating: str
-    risk_reward: float | None = None
+    risk_reward: float | None = Field(default=None, ge=0)
     entry_zones: list[str] = Field(default_factory=list)
     stop_zones: list[str] = Field(default_factory=list)
     target_zones: list[str] = Field(default_factory=list)
