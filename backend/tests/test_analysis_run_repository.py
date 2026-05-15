@@ -1,9 +1,10 @@
 import json
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from paisapal.db.base import Base
+from paisapal.db.models import SourceSnapshot
 from paisapal.db.repository import (
     create_analysis_run,
     get_analysis_run,
@@ -83,3 +84,12 @@ def test_save_analysis_report_feeds_watchlist_and_ticker_report():
     latest = get_latest_report(session, "nvda")
     assert latest is not None
     assert json.loads(latest.report_json)["company_name"] == "NVIDIA Corporation"
+
+    source = session.scalar(
+        select(SourceSnapshot).where(SourceSnapshot.job_id == job.id)
+    )
+    assert source is not None
+    assert source.provider == "mock"
+    assert source.source_type == "market"
+    assert json.loads(source.payload_json) == {"price": 211.5}
+    assert json.loads(source.warnings_json) == []
