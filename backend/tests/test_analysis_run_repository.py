@@ -99,6 +99,7 @@ def test_save_analysis_report_feeds_watchlist_and_ticker_report():
     assert len(watchlist) == 1
     assert watchlist[0].ticker == "NVDA"
     assert watchlist[0].final_decision == "Watchlist"
+    assert job.status == "complete"
 
     latest = get_latest_report(session, "nvda")
     assert latest is not None

@@ -178,7 +178,7 @@ def save_analysis_report(
             )
         )
 
-    job.status = "completed"
+    job.status = "complete"
     session.commit()
     session.refresh(analysis_report)
     return analysis_report
