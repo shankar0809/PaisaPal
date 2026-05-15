@@ -1,7 +1,10 @@
 import pytest
 from pydantic import ValidationError
 
+from paisapal.ai.prompts import build_framework_prompt
 from paisapal.ai.schemas import validate_ai_report
+from paisapal.analysis_runs.models import AnalysisRunSettings
+from paisapal.providers.base import EvidenceSnapshot
 
 
 def valid_report():
@@ -49,3 +52,25 @@ def test_validate_ai_report_rejects_non_positive_current_price():
 
     with pytest.raises(ValidationError):
         validate_ai_report(payload)
+
+
+def test_build_framework_prompt_includes_evidence_urls():
+    evidence = [
+        EvidenceSnapshot(
+            provider="example",
+            source_type="news",
+            status="fresh",
+            label="Example source",
+            payload={"headline": "NVIDIA expands data center revenue"},
+            url="https://example.com/source",
+            retrieved_at="2026-05-15T12:00:00+00:00",
+        )
+    ]
+
+    prompt = build_framework_prompt(
+        ticker="NVDA",
+        settings=AnalysisRunSettings(),
+        evidence=evidence,
+    )
+
+    assert "https://example.com/source" in prompt

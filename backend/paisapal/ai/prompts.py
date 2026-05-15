@@ -30,6 +30,7 @@ def build_framework_prompt(
             "source_type": item.source_type,
             "status": item.status,
             "label": item.label,
+            "url": item.url,
             "payload": item.payload,
             "warnings": item.warnings,
             "retrieved_at": item.retrieved_at,
