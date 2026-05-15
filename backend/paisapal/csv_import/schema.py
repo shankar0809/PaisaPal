@@ -1,0 +1,48 @@
+REQUIRED_COLUMNS = {
+    "ticker",
+    "current_price",
+    "week_52_high",
+    "week_52_low",
+    "resistance",
+    "support",
+    "ma_20",
+    "ma_50",
+    "ma_200",
+    "relative_strength",
+    "sector_trend",
+    "market_trend",
+    "entry",
+    "stop_loss",
+    "target_1",
+    "target_2",
+}
+
+BOOLEAN_COLUMNS = {
+    "vcp_strong_prior_uptrend",
+    "vcp_above_rising_50_day",
+    "vcp_above_rising_200_day",
+    "vcp_relative_strength_improving",
+    "vcp_orderly_consolidation",
+    "vcp_smaller_pullbacks",
+    "vcp_volume_drying_up",
+    "vcp_tightening_near_resistance",
+    "vcp_clear_pivot",
+    "vcp_strong_breakout_volume",
+    "stock_rallied_sharply",
+    "call_heavy_options",
+    "valuation_elevated",
+    "earnings_near",
+}
+
+SCORE_COLUMNS = {
+    "fund_revenue_growth",
+    "fund_eps_growth",
+    "fund_gross_margin",
+    "fund_operating_margin",
+    "fund_free_cash_flow",
+    "fund_balance_sheet",
+    "fund_valuation",
+    "fund_segment_strength",
+    "fund_guidance",
+    "fund_capital_return",
+}

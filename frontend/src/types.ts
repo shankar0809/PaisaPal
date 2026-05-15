@@ -1,0 +1,57 @@
+export type CsvIssue = {
+  row_number: number;
+  column: string;
+  message: string;
+};
+
+export type ImportPreview = {
+  preview_id: string;
+  valid_count: number;
+  error_count: number;
+  warning_count: number;
+  errors: CsvIssue[];
+  warnings: CsvIssue[];
+  rows: Array<{
+    row_number: number;
+    ticker: string;
+    current_price: number;
+  }>;
+};
+
+export type ImportCommit = {
+  batch_id: number;
+  imported_count: number;
+};
+
+export type WatchlistRow = {
+  id: number;
+  ticker: string;
+  current_price: number;
+  final_decision: string;
+  confidence: string;
+  technical_rating: string;
+  fundamental_rating: string;
+  sentiment_rating: string;
+  options_flow_rating: string;
+  risk_reward: number | null;
+  created_at: string;
+};
+
+export type TickerReport = {
+  ticker: string;
+  report: {
+    input: Record<string, unknown>;
+    analysis: Record<string, unknown>;
+  };
+  markdown_report: string;
+  created_at: string;
+};
+
+export type HistoryRow = {
+  id: number;
+  ticker: string;
+  final_decision: string;
+  confidence: string;
+  risk_reward: number | null;
+  created_at: string;
+};
