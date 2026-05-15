@@ -1,6 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { AnalyzePage } from "./AnalyzePage";
 import { TickerInputPanel } from "../components/TickerInputPanel";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("TickerInputPanel", () => {
   it("shows a validation error for empty tickers and does not submit", async () => {
@@ -53,5 +58,51 @@ describe("TickerInputPanel", () => {
       "Max dollar risk must be greater than 0."
     );
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
+
+describe("AnalyzePage", () => {
+  it("renders live readiness and provider configuration", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => [
+          {
+            provider: "openai",
+            configured: true,
+            role: "ai",
+            required_for_live: true,
+            live_ready: true,
+            message: "Live AI analysis ready"
+          },
+          {
+            provider: "polygon",
+            configured: true,
+            role: "market_data",
+            required_for_live: false,
+            live_ready: true,
+            message: "Live AI analysis ready"
+          },
+          {
+            provider: "fmp",
+            configured: false,
+            role: "fundamentals",
+            required_for_live: false,
+            live_ready: true,
+            message: "Live AI analysis ready"
+          }
+        ]
+      })
+    );
+
+    render(<AnalyzePage />);
+
+    expect(await screen.findByText("Live AI analysis ready")).toBeInTheDocument();
+    expect(screen.getByText("openai")).toBeInTheDocument();
+    expect(screen.getByText("polygon")).toBeInTheDocument();
+    expect(screen.getByText("fmp")).toBeInTheDocument();
+    expect(screen.getAllByText("configured")).toHaveLength(2);
+    expect(screen.getByText("missing")).toBeInTheDocument();
   });
 });

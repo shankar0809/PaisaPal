@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchTickerReport } from "../api/client";
+import { FrameworkSourceCoverage } from "../components/FrameworkSourceCoverage";
 import { ReportSection } from "../components/ReportSection";
 import { SourceSummary } from "../components/SourceSummary";
 import type { TickerReport } from "../types";
@@ -48,6 +49,10 @@ export function TickerDetailPage({ ticker }: TickerDetailPageProps) {
 
       <ReportSection title="Source & Freshness">
         <SourceSummary sources={report.report.source_summary ?? []} />
+      </ReportSection>
+
+      <ReportSection title="Framework Source Coverage">
+        <FrameworkSourceCoverage coverage={report.source_coverage ?? []} />
       </ReportSection>
 
       {dataWarnings.length > 0 && (

@@ -47,6 +47,18 @@ export type SourceSummaryItem = {
   warnings: string[];
 };
 
+export type SourceCoverageItem = {
+  section: string;
+  status: "covered" | "partial" | "missing";
+  matched_sources: Array<{
+    provider: string;
+    label: string;
+    status: string;
+    url: string | null;
+  }>;
+  warnings: string[];
+};
+
 export type TickerReport = {
   ticker: string;
   report: {
@@ -68,6 +80,7 @@ export type TickerReport = {
   };
   markdown_report: string;
   created_at: string;
+  source_coverage: SourceCoverageItem[];
 };
 
 export type HistoryRow = {
@@ -101,4 +114,8 @@ export type AnalysisRun = {
 export type ProviderStatus = {
   provider: string;
   configured: boolean;
+  role: string;
+  required_for_live: boolean;
+  live_ready: boolean;
+  message: string;
 };

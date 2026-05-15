@@ -32,7 +32,21 @@ vi.mock("../api/client", () => ({
       analysis: { final_decision: "Buy / Enter" }
     },
     markdown_report: "# MSFT Investment Analysis\n\nAI-generated thesis.",
-    created_at: "2026-05-14T18:00:00Z"
+    created_at: "2026-05-14T18:00:00Z",
+    source_coverage: [
+      {
+        section: "VCP / Technical Pattern View",
+        status: "covered",
+        matched_sources: [{ provider: "polygon", label: "Polygon daily bars", status: "fresh", url: null }],
+        warnings: []
+      },
+      {
+        section: "Options Flow / Implied Move",
+        status: "partial",
+        matched_sources: [{ provider: "polygon", label: "Polygon options chain", status: "fresh", url: null }],
+        warnings: ["Options chain missing greeks"]
+      }
+    ]
   })
 }));
 
@@ -42,6 +56,10 @@ describe("TickerDetailPage", () => {
 
     expect(await screen.findByText("MSFT")).toBeInTheDocument();
     expect(screen.getByText("Source & Freshness")).toBeInTheDocument();
+    expect(screen.getByText("Framework Source Coverage")).toBeInTheDocument();
+    expect(screen.getByText("VCP / Technical Pattern View")).toBeInTheDocument();
+    expect(screen.getByText("Polygon daily bars")).toBeInTheDocument();
+    expect(screen.getByText("Options chain missing greeks")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Polygon market data" })).toHaveAttribute(
       "href",
       "https://example.test/polygon"
