@@ -13,10 +13,11 @@ type Route =
   | { name: "history"; ticker?: string }
   | { name: "ticker"; ticker: string };
 
-function routeFromHash(): Route {
-  const hash = window.location.hash.replace("#/", "");
+export function routeFromHash(hashValue = window.location.hash): Route {
+  const hash = hashValue.replace(/^#\//, "");
   if (hash === "analyze") return { name: "analyze" };
-  if (hash.startsWith("runs/")) return { name: "run", runId: Number(hash.split("/")[1]) };
+  const runMatch = hash.match(/^runs\/([1-9]\d*)$/);
+  if (runMatch) return { name: "run", runId: Number(runMatch[1]) };
   if (hash.startsWith("history/")) return { name: "history", ticker: hash.split("/")[1] };
   if (hash === "history") return { name: "history" };
   if (hash.startsWith("ticker/")) return { name: "ticker", ticker: hash.split("/")[1] };

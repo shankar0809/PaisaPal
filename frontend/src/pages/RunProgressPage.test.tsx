@@ -17,9 +17,9 @@ describe("JobStatusTable", () => {
 
     expect(screen.getByText("in progress")).toBeInTheDocument();
     expect(screen.getByText("Waiting")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Open" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /open .* report/i })).toHaveLength(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open MSFT report" }));
 
     expect(onOpenTicker).toHaveBeenCalledWith("MSFT");
   });

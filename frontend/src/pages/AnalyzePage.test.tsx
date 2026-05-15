@@ -31,4 +31,27 @@ describe("TickerInputPanel", () => {
       })
     );
   });
+
+  it("shows validation errors for invalid account size and max dollar risk", async () => {
+    const onSubmit = vi.fn();
+    render(<TickerInputPanel onSubmit={onSubmit} />);
+
+    fireEvent.change(screen.getByLabelText("Tickers"), { target: { value: "NVDA" } });
+    fireEvent.change(screen.getByLabelText("Account size"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /run analysis/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Account size must be greater than 0."
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Account size"), { target: { value: "100000" } });
+    fireEvent.change(screen.getByLabelText("Max dollar risk"), { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: /run analysis/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Max dollar risk must be greater than 0."
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
 });

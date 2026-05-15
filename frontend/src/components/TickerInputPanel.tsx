@@ -15,7 +15,7 @@ function parseTickers(value: string): string[] {
 
 export function TickerInputPanel({ onSubmit }: TickerInputPanelProps) {
   const [tickers, setTickers] = useState("");
-  const [accountSize, setAccountSize] = useState(100000);
+  const [accountSize, setAccountSize] = useState("100000");
   const [riskPercent, setRiskPercent] = useState(0.5);
   const [maxDollarRisk, setMaxDollarRisk] = useState("");
   const [notes, setNotes] = useState("");
@@ -30,14 +30,29 @@ export function TickerInputPanel({ onSubmit }: TickerInputPanelProps) {
       return;
     }
 
+    const parsedAccountSize = Number(accountSize);
+    if (accountSize.trim() === "" || !Number.isFinite(parsedAccountSize) || parsedAccountSize <= 0) {
+      setError("Account size must be greater than 0.");
+      return;
+    }
+
+    const parsedMaxDollarRisk = maxDollarRisk === "" ? null : Number(maxDollarRisk);
+    if (
+      parsedMaxDollarRisk !== null &&
+      (!Number.isFinite(parsedMaxDollarRisk) || parsedMaxDollarRisk <= 0)
+    ) {
+      setError("Max dollar risk must be greater than 0.");
+      return;
+    }
+
     setError("");
     setSubmitting(true);
     try {
       await onSubmit({
         tickers,
-        account_size: accountSize,
+        account_size: parsedAccountSize,
         risk_percent: riskPercent,
-        max_dollar_risk: maxDollarRisk === "" ? null : Number(maxDollarRisk),
+        max_dollar_risk: parsedMaxDollarRisk,
         notes
       });
     } catch (err) {
@@ -65,7 +80,7 @@ export function TickerInputPanel({ onSubmit }: TickerInputPanelProps) {
           min="0"
           type="number"
           value={accountSize}
-          onChange={(event) => setAccountSize(Number(event.target.value))}
+          onChange={(event) => setAccountSize(event.target.value)}
         />
       </div>
       <div className="field">

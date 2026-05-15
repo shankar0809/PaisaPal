@@ -31,7 +31,11 @@ export function JobStatusTable({ jobs, onOpenTicker }: JobStatusTableProps) {
               <td>{job.error_message ?? ""}</td>
               <td>
                 {job.status === "complete" && (
-                  <button type="button" onClick={() => onOpenTicker(job.ticker)}>
+                  <button
+                    type="button"
+                    aria-label={`Open ${job.ticker} report`}
+                    onClick={() => onOpenTicker(job.ticker)}
+                  >
                     Open
                   </button>
                 )}
