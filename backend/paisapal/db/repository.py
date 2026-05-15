@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 
-from sqlalchemy import Select, select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from paisapal.analysis.models import AnalysisInput, AnalysisResult
@@ -135,26 +135,33 @@ def save_analysis_report(
 
     ticker = str(report.get("ticker") or job.ticker).upper()
     source_summary = report.get("source_summary", [])
-    analysis_report = AnalysisReport(
-        job_id=job.id,
-        ticker=ticker,
-        company_name=report.get("company_name", ""),
-        current_price=report.get("current_price", 0.0),
-        final_decision=report.get("final_decision")
-        or report.get("final_classification", ""),
-        confidence=report.get("confidence", ""),
-        technical_rating=report.get("technical_rating")
-        or report.get("vcp_rating", ""),
-        fundamental_rating=report.get("fundamental_rating", ""),
-        earnings_rating=report.get("earnings_rating", ""),
-        sentiment_rating=report.get("sentiment_rating", ""),
-        options_flow_rating=report.get("options_flow_rating", ""),
-        risk_reward=report.get("risk_reward"),
-        report_json=json.dumps(report),
-        markdown_report=report.get("markdown_report", ""),
-        source_summary_json=json.dumps(source_summary),
+    analysis_report = session.scalar(
+        select(AnalysisReport).where(AnalysisReport.job_id == job.id).limit(1)
     )
-    session.add(analysis_report)
+    if analysis_report is None:
+        analysis_report = AnalysisReport(job_id=job.id)
+        session.add(analysis_report)
+
+    analysis_report.ticker = ticker
+    analysis_report.company_name = report.get("company_name", "")
+    analysis_report.current_price = report.get("current_price", 0.0)
+    analysis_report.final_decision = (
+        report.get("final_decision") or report.get("final_classification", "")
+    )
+    analysis_report.confidence = report.get("confidence", "")
+    analysis_report.technical_rating = (
+        report.get("technical_rating") or report.get("vcp_rating", "")
+    )
+    analysis_report.fundamental_rating = report.get("fundamental_rating", "")
+    analysis_report.earnings_rating = report.get("earnings_rating", "")
+    analysis_report.sentiment_rating = report.get("sentiment_rating", "")
+    analysis_report.options_flow_rating = report.get("options_flow_rating", "")
+    analysis_report.risk_reward = report.get("risk_reward")
+    analysis_report.report_json = json.dumps(report)
+    analysis_report.markdown_report = report.get("markdown_report", "")
+    analysis_report.source_summary_json = json.dumps(source_summary)
+
+    session.execute(delete(SourceSnapshot).where(SourceSnapshot.job_id == job.id))
 
     for snapshot in source_snapshots:
         session.add(
@@ -187,18 +194,41 @@ def _latest_report_ids(session: Session) -> list[int]:
     return list(latest.values())
 
 
-def _order_latest_statement(
-    statement: Select,
-    model: type[AnalysisReport] | type[AnalysisSnapshot],
+def _filter_analysis_rows(
+    rows: list[AnalysisReport | AnalysisSnapshot],
+    decision: str | None = None,
+    technical: str | None = None,
+    fundamentals: str | None = None,
+    sentiment: str | None = None,
+) -> list[AnalysisReport | AnalysisSnapshot]:
+    if decision:
+        rows = [row for row in rows if row.final_decision == decision]
+    if technical:
+        rows = [row for row in rows if row.technical_rating == technical]
+    if fundamentals:
+        rows = [row for row in rows if row.fundamental_rating == fundamentals]
+    if sentiment:
+        rows = [row for row in rows if row.sentiment_rating == sentiment]
+    return rows
+
+
+def _sort_analysis_rows(
+    rows: list[AnalysisReport | AnalysisSnapshot],
     sort: str,
-) -> Select:
+) -> list[AnalysisReport | AnalysisSnapshot]:
     if sort == "ticker":
-        return statement.order_by(model.ticker.asc())
+        return sorted(rows, key=lambda row: row.ticker)
     if sort == "risk_reward":
-        return statement.order_by(model.risk_reward.desc().nullslast())
+        return sorted(
+            rows,
+            key=lambda row: (
+                row.risk_reward is None,
+                -(row.risk_reward or 0),
+            ),
+        )
     if sort == "confidence":
-        return statement.order_by(model.confidence.asc())
-    return statement.order_by(model.created_at.desc())
+        return sorted(rows, key=lambda row: row.confidence)
+    return sorted(rows, key=lambda row: row.created_at, reverse=True)
 
 
 def get_latest_watchlist(
@@ -210,50 +240,29 @@ def get_latest_watchlist(
     sort: str = "updated_desc",
 ) -> list[AnalysisReport | AnalysisSnapshot]:
     report_ids = _latest_report_ids(session)
-    if report_ids:
-        report_statement = select(AnalysisReport).where(AnalysisReport.id.in_(report_ids))
-        if decision:
-            report_statement = report_statement.where(
-                AnalysisReport.final_decision == decision
-            )
-        if technical:
-            report_statement = report_statement.where(
-                AnalysisReport.technical_rating == technical
-            )
-        if fundamentals:
-            report_statement = report_statement.where(
-                AnalysisReport.fundamental_rating == fundamentals
-            )
-        if sentiment:
-            report_statement = report_statement.where(
-                AnalysisReport.sentiment_rating == sentiment
-            )
-        report_statement = _order_latest_statement(
-            report_statement,
-            AnalysisReport,
-            sort,
-        )
-        return list(session.scalars(report_statement).all())
-
-    ids = _latest_snapshot_ids(session)
-    if not ids:
-        return []
-
-    statement: Select[tuple[AnalysisSnapshot]] = select(AnalysisSnapshot).where(
-        AnalysisSnapshot.id.in_(ids)
+    reports = list(
+        session.scalars(select(AnalysisReport).where(AnalysisReport.id.in_(report_ids)))
+        .all()
+        if report_ids
+        else []
     )
-    if decision:
-        statement = statement.where(AnalysisSnapshot.final_decision == decision)
-    if technical:
-        statement = statement.where(AnalysisSnapshot.technical_rating == technical)
-    if fundamentals:
-        statement = statement.where(AnalysisSnapshot.fundamental_rating == fundamentals)
-    if sentiment:
-        statement = statement.where(AnalysisSnapshot.sentiment_rating == sentiment)
+    report_tickers = {report.ticker for report in reports}
 
-    statement = _order_latest_statement(statement, AnalysisSnapshot, sort)
+    snapshot_ids = _latest_snapshot_ids(session)
+    snapshots = list(
+        session.scalars(
+            select(AnalysisSnapshot).where(AnalysisSnapshot.id.in_(snapshot_ids))
+        ).all()
+        if snapshot_ids
+        else []
+    )
 
-    return list(session.scalars(statement).all())
+    rows: list[AnalysisReport | AnalysisSnapshot] = [
+        snapshot for snapshot in snapshots if snapshot.ticker not in report_tickers
+    ]
+    rows.extend(reports)
+    rows = _filter_analysis_rows(rows, decision, technical, fundamentals, sentiment)
+    return _sort_analysis_rows(rows, sort)
 
 
 def get_latest_report(
@@ -287,13 +296,12 @@ def get_history(session: Session, ticker: str) -> list[AnalysisReport | Analysis
             .order_by(AnalysisReport.created_at.desc())
         ).all()
     )
-    if reports:
-        return reports
-
-    return list(
+    snapshots = list(
         session.scalars(
             select(AnalysisSnapshot)
             .where(AnalysisSnapshot.ticker == normalized_ticker)
             .order_by(AnalysisSnapshot.created_at.desc())
         ).all()
     )
+    rows: list[AnalysisReport | AnalysisSnapshot] = [*reports, *snapshots]
+    return _sort_analysis_rows(rows, "updated_desc")

@@ -139,7 +139,11 @@ class AnalysisReport(Base):
     __tablename__ = "analysis_reports"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    job_id: Mapped[int] = mapped_column(ForeignKey("analysis_jobs.id"), index=True)
+    job_id: Mapped[int] = mapped_column(
+        ForeignKey("analysis_jobs.id"),
+        index=True,
+        unique=True,
+    )
     ticker: Mapped[str] = mapped_column(String(20), index=True)
     company_name: Mapped[str] = mapped_column(String(255))
     current_price: Mapped[float] = mapped_column(Float)
