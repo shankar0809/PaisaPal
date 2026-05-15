@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -9,21 +10,29 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 
 from paisapal.analysis.rules import analyze
+from paisapal.analysis_runs.mock_pipeline import build_mock_report, build_mock_sources
+from paisapal.analysis_runs.validation import parse_tickers
 from paisapal.api.schemas import (
+    AnalysisRunCreateRequest,
+    AnalysisRunResponse,
     HistoryRowResponse,
     ImportCommitResponse,
     ImportPreviewRequest,
     ImportPreviewResponse,
+    ProviderStatusResponse,
     TickerReportResponse,
     WatchlistRowResponse,
 )
 from paisapal.csv_import.parser import ParsePreview, parse_watchlist_csv
 from paisapal.db.base import SessionLocal
 from paisapal.db.repository import (
+    create_analysis_run,
     create_import_batch,
+    get_analysis_run,
     get_history,
     get_latest_report,
     get_latest_watchlist,
+    save_analysis_report,
 )
 
 router = APIRouter()
@@ -41,6 +50,90 @@ def get_session():
 @router.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+def _run_response(run) -> AnalysisRunResponse:
+    return AnalysisRunResponse(
+        id=run.id,
+        status=run.status,
+        tickers=json.loads(run.tickers_json),
+        account_size=run.account_size,
+        risk_percent=run.risk_percent,
+        max_dollar_risk=run.max_dollar_risk,
+        notes=run.notes,
+        created_at=run.created_at.isoformat(),
+        jobs=[
+            {
+                "id": job.id,
+                "ticker": job.ticker,
+                "status": job.status,
+                "error_message": job.error_message,
+            }
+            for job in run.jobs
+        ],
+    )
+
+
+@router.post("/analysis-runs", response_model=AnalysisRunResponse)
+def create_run(
+    request: AnalysisRunCreateRequest,
+    session: Session = Depends(get_session),
+) -> AnalysisRunResponse:
+    try:
+        tickers = parse_tickers(request.tickers)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    run = create_analysis_run(
+        session,
+        tickers=tickers,
+        account_size=request.account_size,
+        risk_percent=request.risk_percent,
+        max_dollar_risk=request.max_dollar_risk,
+        notes=request.notes,
+    )
+    return _run_response(run)
+
+
+@router.get("/analysis-runs/{run_id}", response_model=AnalysisRunResponse)
+def analysis_run(run_id: int, session: Session = Depends(get_session)) -> AnalysisRunResponse:
+    run = get_analysis_run(session, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Analysis run not found")
+    return _run_response(run)
+
+
+@router.post("/analysis-runs/{run_id}/run-mock", response_model=AnalysisRunResponse)
+def run_mock_analysis(run_id: int, session: Session = Depends(get_session)) -> AnalysisRunResponse:
+    run = get_analysis_run(session, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Analysis run not found")
+    for job in run.jobs:
+        save_analysis_report(
+            session,
+            job_id=job.id,
+            report=build_mock_report(job.ticker),
+            source_snapshots=build_mock_sources(job.ticker),
+        )
+    refreshed = get_analysis_run(session, run_id)
+    if refreshed is None:
+        raise HTTPException(status_code=404, detail="Analysis run not found")
+    return _run_response(refreshed)
+
+
+@router.get("/provider-status", response_model=list[ProviderStatusResponse])
+def provider_status() -> list[ProviderStatusResponse]:
+    return [
+        ProviderStatusResponse(
+            provider="openai",
+            configured=bool(os.getenv("OPENAI_API_KEY")),
+        ),
+        ProviderStatusResponse(provider="polygon", configured=bool(os.getenv("POLYGON_API_KEY"))),
+        ProviderStatusResponse(
+            provider="alpha_vantage",
+            configured=bool(os.getenv("ALPHA_VANTAGE_API_KEY")),
+        ),
+        ProviderStatusResponse(provider="fmp", configured=bool(os.getenv("FMP_API_KEY"))),
+    ]
 
 
 @router.post("/import/preview", response_model=ImportPreviewResponse)
