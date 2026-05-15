@@ -9,7 +9,7 @@ import type {
 } from "../types";
 
 export type CreateAnalysisRunPayload = {
-  tickers: string[];
+  tickers: string;
   account_size: number;
   risk_percent: number;
   max_dollar_risk: number | null;

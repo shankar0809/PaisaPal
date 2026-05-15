@@ -34,7 +34,7 @@ export function TickerInputPanel({ onSubmit }: TickerInputPanelProps) {
     setSubmitting(true);
     try {
       await onSubmit({
-        tickers: parsedTickers,
+        tickers,
         account_size: accountSize,
         risk_percent: riskPercent,
         max_dollar_risk: maxDollarRisk === "" ? null : Number(maxDollarRisk),

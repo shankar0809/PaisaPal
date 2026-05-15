@@ -13,17 +13,17 @@ describe("TickerInputPanel", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("submits parsed tickers with the selected risk percent", async () => {
+  it("submits the ticker input string with the selected risk percent", async () => {
     const onSubmit = vi.fn();
     render(<TickerInputPanel onSubmit={onSubmit} />);
 
-    fireEvent.change(screen.getByLabelText("Tickers"), { target: { value: "msft, AAPL\nnvda" } });
+    fireEvent.change(screen.getByLabelText("Tickers"), { target: { value: "NVDA, TSLA" } });
     fireEvent.change(screen.getByLabelText("Risk percent"), { target: { value: "0.5" } });
     fireEvent.click(screen.getByRole("button", { name: /run analysis/i }));
 
     await waitFor(() =>
       expect(onSubmit).toHaveBeenCalledWith({
-        tickers: ["MSFT", "AAPL", "NVDA"],
+        tickers: "NVDA, TSLA",
         account_size: 100000,
         risk_percent: 0.5,
         max_dollar_risk: null,
