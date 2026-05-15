@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchTickerReport } from "../api/client";
 import { ReportSection } from "../components/ReportSection";
+import { SourceSummary } from "../components/SourceSummary";
 import type { TickerReport } from "../types";
 
 type TickerDetailPageProps = {
@@ -33,8 +34,8 @@ export function TickerDetailPage({ ticker }: TickerDetailPageProps) {
   }
   if (!report) return <main className="page"><div className="panel emptyState">Loading report...</div></main>;
 
-  const input = report.report.input;
-  const analysis = report.report.analysis;
+  const dataWarnings = report.report.data_warnings ?? [];
+  const markdownReport = report.markdown_report || "No generated report was stored for this ticker.";
 
   return (
     <main className="page">
@@ -44,47 +45,23 @@ export function TickerDetailPage({ ticker }: TickerDetailPageProps) {
           Export Markdown
         </a>
       </header>
-      <ReportSection title="Current Stock Context">
-        <dl>
-          <dt>Current Price</dt>
-          <dd>{valueText(input.current_price)}</dd>
-          <dt>Context Rating</dt>
-          <dd>{valueText(analysis.context_rating)}</dd>
-        </dl>
+
+      <ReportSection title="Source & Freshness">
+        <SourceSummary sources={report.report.source_summary ?? []} />
       </ReportSection>
-      <ReportSection title="Technical Setup">
-        <dl>
-          <dt>VCP Rating</dt>
-          <dd>{valueText(analysis.vcp_rating)}</dd>
-          <dt>VCP Score</dt>
-          <dd>{valueText(analysis.vcp_score)}</dd>
-        </dl>
-      </ReportSection>
-      <ReportSection title="Trade Plan">
-        <dl>
-          <dt>Risk/Reward</dt>
-          <dd>{valueText(analysis.risk_reward)}</dd>
-          <dt>Position Size</dt>
-          <dd>{valueText(analysis.position_size)}</dd>
-        </dl>
-      </ReportSection>
-      <ReportSection title="Fundamentals">
-        <p>{valueText(analysis.fundamental_rating)}</p>
-      </ReportSection>
-      <ReportSection title="Market Sentiment">
-        <p>{valueText(analysis.sentiment_rating)}</p>
-      </ReportSection>
-      <ReportSection title="Options Flow">
-        <p>{valueText(analysis.options_flow_rating)}</p>
-      </ReportSection>
-      <ReportSection title="LEAP Analysis">
-        <p>LEAP import is not enabled in v1</p>
-      </ReportSection>
-      <ReportSection title="Earnings Implied Move">
-        <p>Earnings import is not enabled in v1</p>
-      </ReportSection>
-      <ReportSection title="Final Directional Recommendation">
-        <p>{valueText(analysis.final_decision)}</p>
+
+      {dataWarnings.length > 0 && (
+        <ReportSection title="Data Warnings">
+          <ul>
+            {dataWarnings.map((warning) => (
+              <li key={warning}>{valueText(warning)}</li>
+            ))}
+          </ul>
+        </ReportSection>
+      )}
+
+      <ReportSection title="Generated Report">
+        <pre className="markdownReport">{markdownReport}</pre>
       </ReportSection>
     </main>
   );

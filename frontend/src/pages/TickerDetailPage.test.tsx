@@ -6,29 +6,49 @@ vi.mock("../api/client", () => ({
   fetchTickerReport: async () => ({
     ticker: "MSFT",
     report: {
+      ticker: "MSFT",
+      company_name: "Microsoft Corp.",
+      current_price: 420,
+      final_classification: "Buy / Enter",
+      confidence: "High",
+      technical_rating: "High-quality VCP",
+      vcp_rating: "Constructive",
+      fundamental_rating: "Elite fundamentals",
+      earnings_rating: "Clean setup",
+      sentiment_rating: "Bullish and improving",
+      options_flow_rating: "Bullish leaning",
+      data_warnings: ["Options flow provider returned stale data"],
+      source_summary: [
+        {
+          provider: "polygon",
+          retrieved_at: "2026-05-14T18:00:00Z",
+          status: "ok",
+          label: "Polygon market data",
+          url: "https://example.test/polygon",
+          warnings: []
+        }
+      ],
       input: { ticker: "MSFT", current_price: 420 },
-      analysis: {
-        context_rating: "Constructive consolidation",
-        vcp_rating: "High-quality VCP",
-        fundamental_rating: "Elite fundamentals",
-        sentiment_rating: "Bullish and improving",
-        options_flow_rating: "Bullish leaning",
-        final_decision: "Buy / Enter"
-      }
+      analysis: { final_decision: "Buy / Enter" }
     },
-    markdown_report: "# MSFT Investment Analysis",
+    markdown_report: "# MSFT Investment Analysis\n\nAI-generated thesis.",
     created_at: "2026-05-14T18:00:00Z"
   })
 }));
 
 describe("TickerDetailPage", () => {
-  it("renders framework sections and final decision", async () => {
+  it("renders AI source freshness, data warnings, and generated markdown", async () => {
     render(<TickerDetailPage ticker="MSFT" />);
 
     expect(await screen.findByText("MSFT")).toBeInTheDocument();
-    expect(screen.getByText("Current Stock Context")).toBeInTheDocument();
-    expect(screen.getByText("Technical Setup")).toBeInTheDocument();
-    expect(screen.getByText("Final Directional Recommendation")).toBeInTheDocument();
-    expect(screen.getByText("Buy / Enter")).toBeInTheDocument();
+    expect(screen.getByText("Source & Freshness")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Polygon market data" })).toHaveAttribute(
+      "href",
+      "https://example.test/polygon"
+    );
+    expect(screen.getByText("Data Warnings")).toBeInTheDocument();
+    expect(screen.getByText("Options flow provider returned stale data")).toBeInTheDocument();
+    expect(screen.getByText("Generated Report")).toBeInTheDocument();
+    expect(screen.getByText(/AI-generated thesis/)).toBeInTheDocument();
   });
 });

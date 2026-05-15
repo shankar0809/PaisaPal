@@ -18,13 +18,15 @@ export function WatchlistTable({ rows, onOpenTicker }: WatchlistTableProps) {
           <tr>
             <th>Ticker</th>
             <th>Price</th>
-            <th>Decision</th>
+            <th>Classification</th>
             <th>Confidence</th>
             <th>Technical</th>
             <th>Fundamentals</th>
+            <th>Earnings</th>
             <th>Sentiment</th>
             <th>Options</th>
             <th>Risk/Reward</th>
+            <th>Updated</th>
           </tr>
         </thead>
         <tbody>
@@ -38,9 +40,11 @@ export function WatchlistTable({ rows, onOpenTicker }: WatchlistTableProps) {
               <td>{row.confidence}</td>
               <td>{row.technical_rating}</td>
               <td>{row.fundamental_rating}</td>
+              <td>{row.earnings_rating ?? "N/A"}</td>
               <td>{row.sentiment_rating}</td>
               <td>{row.options_flow_rating}</td>
               <td>{row.risk_reward === null ? "N/A" : row.risk_reward.toFixed(2)}</td>
+              <td>{new Date(row.created_at).toLocaleString()}</td>
             </tr>
           ))}
         </tbody>

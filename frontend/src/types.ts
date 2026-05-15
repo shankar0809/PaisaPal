@@ -31,17 +31,40 @@ export type WatchlistRow = {
   confidence: string;
   technical_rating: string;
   fundamental_rating: string;
+  earnings_rating?: string;
   sentiment_rating: string;
   options_flow_rating: string;
   risk_reward: number | null;
   created_at: string;
 };
 
+export type SourceSummaryItem = {
+  provider: string;
+  retrieved_at: string;
+  status: string;
+  label: string;
+  url: string | null;
+  warnings: string[];
+};
+
 export type TickerReport = {
   ticker: string;
   report: {
-    input: Record<string, unknown>;
-    analysis: Record<string, unknown>;
+    ticker?: string;
+    company_name?: string;
+    current_price?: number;
+    final_classification?: string;
+    confidence?: string;
+    technical_rating?: string;
+    vcp_rating?: string;
+    fundamental_rating?: string;
+    earnings_rating?: string;
+    sentiment_rating?: string;
+    options_flow_rating?: string;
+    data_warnings?: string[];
+    source_summary?: SourceSummaryItem[];
+    input?: Record<string, unknown>;
+    analysis?: Record<string, unknown>;
   };
   markdown_report: string;
   created_at: string;
