@@ -1,6 +1,8 @@
 # PaisaPal
 
-PaisaPal is a local single-user investment analysis app. It imports CSV watchlists, runs a deterministic framework for technicals, fundamentals, sentiment, options flow, risk, and final decision, then displays a dashboard and ticker reports.
+PaisaPal is a local single-user investment analysis app. It accepts a set of tickers, creates one analysis job per ticker, gathers market evidence from configured providers, supplements it with GPT web-search research, and generates a framework report using GPT-5.5.
+
+The app is informational only and is not financial advice.
 
 ## Local Development
 
@@ -21,17 +23,33 @@ npm run dev
 
 The frontend runs at `http://127.0.0.1:5173`. The backend runs at `http://127.0.0.1:8000`.
 
-## CSV Import
+## Analysis Workflow
 
-Use `examples/sample_watchlist.csv` as the starting format.
+Enter one or more tickers from the Analyze screen. PaisaPal creates one job for each ticker, collects structured evidence from available providers, records source freshness, and generates a report that follows:
 
-Required columns:
+1. Current Stock Context
+2. VCP / Technical Pattern View
+3. Entry, Stop-Loss, and Target Zones
+4. SEPA-Style Position Sizing
+5. Earnings Review
+6. Fundamental Metrics
+7. Market Sentiment
+8. Options Flow / Implied Move
+9. Final View
 
-```text
-ticker,current_price,week_52_high,week_52_low,resistance,support,ma_20,ma_50,ma_200,relative_strength,sector_trend,market_trend,entry,stop_loss,target_1,target_2
+Provider keys are optional for local UI development. Missing providers are recorded as missing evidence and should lower confidence in generated analysis.
+
+## Environment
+
+Copy `.env.example` to `.env` and fill the keys you want to use:
+
+```bash
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.5
+POLYGON_API_KEY=
+ALPHA_VANTAGE_API_KEY=
+FMP_API_KEY=
 ```
-
-Optional columns include VCP flags, fundamental scores, sentiment fields, and options-flow values. The app validates stop-loss, targets, positive price fields, ticker values, and score ranges before saving rows.
 
 ## Local Data
 
@@ -39,12 +57,12 @@ The backend stores local data in `paisapal.sqlite`. This database is ignored by 
 
 ## Current Capabilities
 
-- CSV preview and validation
-- SQLite-backed import batches and analysis snapshots
-- Deterministic analysis rules
+- Ticker-based analysis runs
+- Per-ticker job progress
+- Provider availability status
+- Mock provider evidence for keyless local development
+- GPT-5.5 report validation and prompt assembly
 - Watchlist dashboard
-- Ticker report view
+- Ticker report view with source freshness
 - Snapshot history
 - Markdown report export
-
-The app is informational only and is not financial advice.
