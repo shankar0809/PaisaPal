@@ -37,7 +37,9 @@ Enter one or more tickers from the Analyze screen. PaisaPal creates one job for 
 8. Options Flow / Implied Move
 9. Final View
 
-Provider keys are optional for local UI development. Missing providers are recorded as missing evidence and should lower confidence in generated analysis.
+Provider keys are optional for local UI development. When `ALPHA_VANTAGE_API_KEY` is set, the live run collects Alpha Vantage daily price, company overview, earnings, and news sentiment evidence. When no market-data keys are configured, the app falls back to mock evidence so the UI remains usable.
+
+Use the regular **Run Analysis** action for configured live providers and GPT commentary. The backend still exposes `/api/analysis-runs/{run_id}/run-mock` for deterministic local testing.
 
 ## Environment
 
@@ -60,7 +62,8 @@ The backend stores local data in `paisapal.sqlite`. This database is ignored by 
 - Ticker-based analysis runs
 - Per-ticker job progress
 - Provider availability status
-- Mock provider evidence for keyless local development
+- Alpha Vantage evidence for market data, fundamentals, earnings, and news sentiment
+- Mock evidence fallback for keyless local development
 - GPT-5.5 report validation and prompt assembly
 - Watchlist dashboard
 - Ticker report view with source freshness
