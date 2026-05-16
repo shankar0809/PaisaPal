@@ -1,10 +1,13 @@
 from datetime import date
 
 from paisapal.providers.alpha_vantage import AlphaVantageProvider
-from paisapal.providers.base import EvidenceSnapshot
+from paisapal.providers.base import EvidenceSnapshot, redact_url_secrets
 from paisapal.providers.fmp import FmpProvider
 from paisapal.providers.mock import MockProvider
 from paisapal.providers.polygon import PolygonProvider
+from paisapal.providers.sec_edgar import SecEdgarProvider
+from paisapal.providers.stooq import StooqProvider
+from paisapal.providers.yahoo import YahooFinanceProvider
 
 
 class FakeAlphaVantageResponse:
@@ -72,6 +75,68 @@ class FakePolygonClient:
         return FakePolygonResponse(self.payloads[path])
 
 
+class FakeYahooResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def json(self):
+        return self.payload
+
+    def raise_for_status(self):
+        return None
+
+
+class FakeYahooClient:
+    def __init__(self, payload):
+        self.payload = payload
+        self.calls = []
+
+    def get(self, url, *, params, timeout, headers=None):
+        self.calls.append({"url": url, "params": params, "timeout": timeout, "headers": headers})
+        return FakeYahooResponse(self.payload)
+
+
+class FakeSecResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def json(self):
+        return self.payload
+
+    def raise_for_status(self):
+        return None
+
+
+class FakeSecClient:
+    def __init__(self, payloads):
+        self.payloads = payloads
+        self.calls = []
+
+    def get(self, url, *, headers, timeout):
+        self.calls.append({"url": url, "headers": headers, "timeout": timeout})
+        if url.endswith("/company_tickers.json"):
+            return FakeSecResponse(self.payloads["tickers"])
+        return FakeSecResponse(self.payloads["companyfacts"])
+
+
+class FakeStooqResponse:
+    def __init__(self, text):
+        self.text = text
+
+    def raise_for_status(self):
+        return None
+
+
+class FakeStooqClient:
+    def __init__(self, text):
+        self.text = text
+        self.calls = []
+
+    def get(self, url, *, params, timeout):
+        self.calls.append({"url": url, "params": params, "timeout": timeout})
+        return FakeStooqResponse(self.text)
+
+
 def test_mock_provider_returns_all_core_evidence_types():
     provider = MockProvider()
 
@@ -103,6 +168,20 @@ def test_evidence_snapshot_source_row_includes_retrieved_at():
     assert source_row["retrieved_at"] == "2026-01-02T03:04:05+00:00"
 
 
+def test_redact_url_secrets_removes_provider_api_keys_from_warning_text():
+    warning = (
+        "Client error for url "
+        "'https://example.test/query?symbol=NVDA&apikey=secret-one&apiKey=secret-two'"
+    )
+
+    redacted = redact_url_secrets(warning)
+
+    assert "secret-one" not in redacted
+    assert "secret-two" not in redacted
+    assert "apikey=[REDACTED]" in redacted
+    assert "apiKey=[REDACTED]" in redacted
+
+
 def test_unconfigured_real_providers_return_missing_snapshots(monkeypatch):
     monkeypatch.delenv("ALPHA_VANTAGE_API_KEY", raising=False)
     monkeypatch.delenv("FMP_API_KEY", raising=False)
@@ -119,6 +198,173 @@ def test_unconfigured_real_providers_return_missing_snapshots(monkeypatch):
         assert len(evidence) == 1
         assert evidence[0].status == "missing"
         assert "API key is not configured" in evidence[0].warnings
+
+
+def test_yahoo_provider_collects_market_and_technical_snapshots():
+    payload = {
+        "chart": {
+            "result": [
+                {
+                    "meta": {
+                        "symbol": "NVDA",
+                        "longName": "NVIDIA Corporation",
+                        "regularMarketPrice": 130.5,
+                        "previousClose": 127.25,
+                        "currency": "USD",
+                        "exchangeName": "NMS",
+                    },
+                    "timestamp": [1, 2, 3],
+                    "indicators": {
+                        "quote": [
+                            {
+                                "open": [100.0, 101.0, 102.0],
+                                "high": [101.0, 103.0, 104.0],
+                                "low": [99.0, 100.0, 101.0],
+                                "close": [100.5, 102.5, 103.5],
+                                "volume": [1000, 2000, 3000],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+    }
+    http_client = FakeYahooClient(payload)
+    provider = YahooFinanceProvider(http_client=http_client)
+
+    evidence = provider.collect("NVDA")
+
+    assert {item.source_type for item in evidence} == {"market", "technicals"}
+    market = next(item for item in evidence if item.source_type == "market")
+    assert market.provider == "yahoo"
+    assert market.payload["ticker"] == "NVDA"
+    assert market.payload["name"] == "NVIDIA Corporation"
+    assert market.payload["session"]["price"] == 130.5
+    technicals = next(item for item in evidence if item.source_type == "technicals")
+    assert technicals.payload["latest_close"] == 103.5
+    assert technicals.payload["range_high"] == 104.0
+    assert technicals.payload["range_low"] == 99.0
+    assert technicals.payload["average_volume"] == 2000
+    assert len(technicals.payload["bars"]) == 3
+    assert http_client.calls[0]["params"]["range"] == "6mo"
+    assert http_client.calls[0]["params"]["interval"] == "1d"
+
+
+def test_sec_edgar_provider_collects_fundamental_financial_and_ratio_snapshots():
+    http_client = FakeSecClient(
+        {
+            "tickers": {
+                "0": {"ticker": "NVDA", "cik_str": 1045810, "title": "NVIDIA CORP"}
+            },
+            "companyfacts": {
+                "facts": {
+                    "us-gaap": {
+                        "Revenues": {
+                            "units": {
+                                "USD": [
+                                    {"fy": 2025, "fp": "FY", "form": "10-K", "val": 130497000000}
+                                ]
+                            }
+                        },
+                        "NetIncomeLoss": {
+                            "units": {
+                                "USD": [
+                                    {"fy": 2025, "fp": "FY", "form": "10-K", "val": 72880000000}
+                                ]
+                            }
+                        },
+                        "Assets": {
+                            "units": {
+                                "USD": [
+                                    {"fy": 2025, "fp": "FY", "form": "10-K", "val": 111601000000}
+                                ]
+                            }
+                        },
+                        "Liabilities": {
+                            "units": {
+                                "USD": [
+                                    {"fy": 2025, "fp": "FY", "form": "10-K", "val": 32274000000}
+                                ]
+                            }
+                        },
+                        "StockholdersEquity": {
+                            "units": {
+                                "USD": [
+                                    {"fy": 2025, "fp": "FY", "form": "10-K", "val": 79327000000}
+                                ]
+                            }
+                        },
+                        "OperatingCashFlow": {
+                            "units": {
+                                "USD": [
+                                    {"fy": 2025, "fp": "FY", "form": "10-K", "val": 64089000000}
+                                ]
+                            }
+                        },
+                    }
+                }
+            },
+        }
+    )
+    provider = SecEdgarProvider(http_client=http_client, user_agent="PaisaPal test contact@example.com")
+
+    evidence = provider.collect("NVDA")
+
+    assert {item.source_type for item in evidence} == {"fundamentals", "financials", "ratios"}
+    fundamentals = next(item for item in evidence if item.source_type == "fundamentals")
+    assert fundamentals.provider == "sec_edgar"
+    assert fundamentals.payload["ticker"] == "NVDA"
+    assert fundamentals.payload["name"] == "NVIDIA CORP"
+    assert fundamentals.payload["cik"] == "0001045810"
+    financials = next(item for item in evidence if item.source_type == "financials")
+    assert financials.payload["income_statement"]["revenue"] == 130497000000
+    assert financials.payload["balance_sheet"]["assets"] == 111601000000
+    ratios = next(item for item in evidence if item.source_type == "ratios")
+    assert ratios.payload["net_margin"] == 0.5585
+    assert ratios.payload["debt_to_assets"] == 0.2892
+    assert all(
+        call["headers"]["User-Agent"] == "PaisaPal test contact@example.com"
+        for call in http_client.calls
+    )
+
+
+def test_stooq_provider_collects_market_and_technical_snapshots():
+    csv_text = "\n".join(
+        [
+            "Date,Open,High,Low,Close,Volume",
+            "2026-05-13,100,103,99,102,1000",
+            "2026-05-14,102,106,101,105,2000",
+            "2026-05-15,105,108,104,107,3000",
+        ]
+    )
+    http_client = FakeStooqClient(csv_text)
+    provider = StooqProvider(api_key="free-key", http_client=http_client)
+
+    evidence = provider.collect("NVDA")
+
+    assert {item.source_type for item in evidence} == {"market", "technicals"}
+    market = next(item for item in evidence if item.source_type == "market")
+    assert market.provider == "stooq"
+    assert market.payload["ticker"] == "NVDA"
+    assert market.payload["session"]["price"] == 107.0
+    technicals = next(item for item in evidence if item.source_type == "technicals")
+    assert technicals.payload["latest_close"] == 107.0
+    assert technicals.payload["range_high"] == 108.0
+    assert technicals.payload["range_low"] == 99.0
+    assert technicals.payload["average_volume"] == 2000
+    assert http_client.calls[0]["params"]["s"] == "nvda.us"
+    assert http_client.calls[0]["params"]["apikey"] == "free-key"
+
+
+def test_stooq_provider_returns_missing_snapshot_without_api_key(monkeypatch):
+    monkeypatch.delenv("STOOQ_API_KEY", raising=False)
+    provider = StooqProvider(api_key=None)
+
+    evidence = provider.collect("NVDA")
+
+    assert len(evidence) == 1
+    assert evidence[0].status == "missing"
+    assert evidence[0].warnings == ["Stooq CSV API key is not configured"]
 
 
 def test_alpha_vantage_provider_collects_live_evidence_snapshots():

@@ -5,7 +5,7 @@ from typing import Any
 
 import httpx
 
-from paisapal.providers.base import EvidenceSnapshot
+from paisapal.providers.base import EvidenceSnapshot, redact_url_secrets
 
 BASE_URL = "https://financialmodelingprep.com/stable"
 
@@ -217,7 +217,7 @@ class FmpProvider:
             label=f"Financial Modeling Prep {endpoint}",
             payload={"ticker": ticker, "endpoint": endpoint},
             url=f"{BASE_URL}/{endpoint}",
-            warnings=[warning],
+            warnings=[redact_url_secrets(warning)],
         )
 
 

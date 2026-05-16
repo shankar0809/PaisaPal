@@ -158,9 +158,10 @@ def test_run_analysis_uses_configured_providers_and_openai_client(client, monkey
             update_job_status(session, job.id, "complete")
 
     live_provider = FakeProvider()
+    monkeypatch.setenv("AI_PROVIDER", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
     monkeypatch.setattr(routes, "configured_providers", lambda: [live_provider])
-    monkeypatch.setattr(routes, "OpenAiAnalysisClient", FakeOpenAiClient)
+    monkeypatch.setattr(routes, "build_analysis_client", lambda: FakeOpenAiClient())
     monkeypatch.setattr(routes, "AnalysisOrchestrator", CapturingOrchestrator)
     created = client.post("/api/analysis-runs", json={"tickers": "NVDA"}).json()
 
@@ -170,6 +171,42 @@ def test_run_analysis_uses_configured_providers_and_openai_client(client, monkey
     assert response.json()["status"] == "complete"
     assert captured["providers"] == [live_provider]
     assert isinstance(captured["ai_client"], FakeOpenAiClient)
+    assert captured["use_live_ai"] is True
+
+
+def test_run_analysis_uses_ollama_client_when_selected(client, monkeypatch):
+    captured = {}
+
+    class FakeProvider:
+        name = "fake_live_provider"
+
+    class FakeOllamaClient:
+        pass
+
+    class CapturingOrchestrator:
+        def __init__(self, providers=None, ai_client=None, use_live_ai=False):
+            captured["providers"] = providers
+            captured["ai_client"] = ai_client
+            captured["use_live_ai"] = use_live_ai
+
+        def run_job(self, session, job):
+            update_job_status(session, job.id, "complete")
+
+    live_provider = FakeProvider()
+    monkeypatch.setenv("AI_PROVIDER", "ollama")
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(routes, "configured_providers", lambda: [live_provider])
+    monkeypatch.setattr(routes, "build_analysis_client", lambda: FakeOllamaClient())
+    monkeypatch.setattr(routes, "AnalysisOrchestrator", CapturingOrchestrator)
+    created = client.post("/api/analysis-runs", json={"tickers": "NVDA"}).json()
+
+    response = client.post(f"/api/analysis-runs/{created['id']}/run")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "complete"
+    assert captured["providers"] == [live_provider]
+    assert isinstance(captured["ai_client"], FakeOllamaClient)
     assert captured["use_live_ai"] is True
 
 
@@ -194,6 +231,8 @@ def test_run_mock_analysis_marks_run_partial_when_jobs_are_mixed(client, monkeyp
 
 
 def test_provider_status_includes_live_readiness_metadata(client, monkeypatch):
+    monkeypatch.setenv("MARKET_DATA_MODE", "paid")
+    monkeypatch.setenv("AI_PROVIDER", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
     monkeypatch.setenv("POLYGON_API_KEY", "polygon-key")
     monkeypatch.delenv("ALPHA_VANTAGE_API_KEY", raising=False)
@@ -211,7 +250,30 @@ def test_provider_status_includes_live_readiness_metadata(client, monkeypatch):
     assert all(item["message"] == "Live AI analysis ready" for item in body)
 
 
+def test_provider_status_includes_ollama_readiness_metadata(client, monkeypatch):
+    monkeypatch.setenv("MARKET_DATA_MODE", "paid")
+    monkeypatch.setenv("AI_PROVIDER", "ollama")
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("POLYGON_API_KEY", "polygon-key")
+    monkeypatch.delenv("ALPHA_VANTAGE_API_KEY", raising=False)
+    monkeypatch.delenv("FMP_API_KEY", raising=False)
+
+    response = client.get("/api/provider-status")
+
+    assert response.status_code == 200
+    body = response.json()
+    by_provider = {item["provider"]: item for item in body}
+    assert by_provider["ollama"]["role"] == "ai"
+    assert by_provider["ollama"]["configured"] is True
+    assert by_provider["ollama"]["required_for_live"] is True
+    assert by_provider["polygon"]["role"] == "market_data"
+    assert all(item["live_ready"] is True for item in body)
+    assert all(item["message"] == "Live AI analysis ready" for item in body)
+
+
 def test_provider_status_reports_not_ready_without_ai_or_market_data(client, monkeypatch):
+    monkeypatch.setenv("MARKET_DATA_MODE", "paid")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("POLYGON_API_KEY", raising=False)
     monkeypatch.delenv("ALPHA_VANTAGE_API_KEY", raising=False)
@@ -226,6 +288,7 @@ def test_provider_status_reports_not_ready_without_ai_or_market_data(client, mon
 
 
 def test_configured_providers_returns_alpha_vantage_when_key_is_present(monkeypatch):
+    monkeypatch.setenv("MARKET_DATA_MODE", "paid")
     monkeypatch.setenv("ALPHA_VANTAGE_API_KEY", "demo-key")
     monkeypatch.delenv("FMP_API_KEY", raising=False)
     monkeypatch.delenv("POLYGON_API_KEY", raising=False)
@@ -235,7 +298,57 @@ def test_configured_providers_returns_alpha_vantage_when_key_is_present(monkeypa
     assert [provider.name for provider in providers] == ["alpha_vantage"]
 
 
+def test_configured_providers_returns_free_stack_by_default(monkeypatch):
+    monkeypatch.delenv("MARKET_DATA_MODE", raising=False)
+    monkeypatch.delenv("ENABLE_PAID_PROVIDER_FALLBACK", raising=False)
+    monkeypatch.setenv("ALPHA_VANTAGE_API_KEY", "demo-key")
+    monkeypatch.setenv("FMP_API_KEY", "fmp-key")
+    monkeypatch.setenv("POLYGON_API_KEY", "polygon-key")
+
+    providers = configured_providers()
+
+    assert [provider.name for provider in providers] == ["yahoo", "sec_edgar", "stooq"]
+
+
+def test_configured_providers_appends_paid_stack_when_free_fallback_enabled(monkeypatch):
+    monkeypatch.setenv("MARKET_DATA_MODE", "free")
+    monkeypatch.setenv("ENABLE_PAID_PROVIDER_FALLBACK", "true")
+    monkeypatch.setenv("ALPHA_VANTAGE_API_KEY", "demo-key")
+    monkeypatch.setenv("FMP_API_KEY", "fmp-key")
+    monkeypatch.setenv("POLYGON_API_KEY", "polygon-key")
+
+    providers = configured_providers()
+
+    assert [provider.name for provider in providers] == [
+        "yahoo",
+        "sec_edgar",
+        "stooq",
+        "alpha_vantage",
+        "fmp",
+        "polygon",
+    ]
+
+
+def test_provider_status_reports_free_market_data_mode(client, monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "ollama")
+    monkeypatch.setenv("MARKET_DATA_MODE", "free")
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
+    monkeypatch.delenv("POLYGON_API_KEY", raising=False)
+    monkeypatch.delenv("ALPHA_VANTAGE_API_KEY", raising=False)
+    monkeypatch.delenv("FMP_API_KEY", raising=False)
+
+    response = client.get("/api/provider-status")
+
+    assert response.status_code == 200
+    by_provider = {item["provider"]: item for item in response.json()}
+    assert by_provider["yahoo"]["configured"] is True
+    assert by_provider["sec_edgar"]["configured"] is True
+    assert by_provider["stooq"]["configured"] is False
+    assert by_provider["yahoo"]["live_ready"] is True
+
+
 def test_configured_providers_falls_back_to_mock_without_provider_keys(monkeypatch):
+    monkeypatch.setenv("MARKET_DATA_MODE", "paid")
     monkeypatch.delenv("ALPHA_VANTAGE_API_KEY", raising=False)
     monkeypatch.delenv("FMP_API_KEY", raising=False)
     monkeypatch.delenv("POLYGON_API_KEY", raising=False)

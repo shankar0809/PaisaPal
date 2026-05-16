@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from paisapal.ai.evidence_map import build_framework_evidence_map
 from paisapal.ai.prompts import build_framework_prompt
 from paisapal.ai.schemas import validate_ai_report
+from paisapal.analysis_runs.evidence_guard import enforce_missing_evidence_ratings
 from paisapal.analysis_runs.models import AnalysisRunSettings
 from paisapal.providers.base import EvidenceSnapshot
 
@@ -124,3 +125,44 @@ def test_build_framework_prompt_includes_framework_evidence_map_and_quality_rule
     assert "2. VCP / Technical Pattern View" in prompt
     assert "Use source-backed commentary in every framework section" in prompt
     assert "If evidence is missing or weak, say so explicitly" in prompt
+
+
+def test_enforce_missing_evidence_ratings_overrides_unsupported_ai_claims():
+    report = valid_report()
+    report["markdown_report"] = "\n".join(
+        [
+            "# NVIDIA Corporation (NVDA) - Stock Analysis Report",
+            "- **Earnings Rating:** Strong",
+            "- **Sentiment Rating:** Bullish",
+            "- **Options Flow Rating:** Call-heavy",
+        ]
+    )
+    report["bullish_factors"] = [
+        "Strong revenue growth",
+        "Positive earnings outlook",
+        "Bullish options flow",
+        "Improving sentiment",
+    ]
+    evidence = [
+        EvidenceSnapshot(
+            provider="sec_edgar",
+            source_type="fundamentals",
+            status="fresh",
+            label="SEC facts",
+            payload={},
+        )
+    ]
+
+    guarded = enforce_missing_evidence_ratings(report, evidence)
+
+    assert guarded["technical_rating"] == "Missing"
+    assert guarded["vcp_rating"] == "Missing"
+    assert guarded["earnings_rating"] == "Missing"
+    assert guarded["sentiment_rating"] == "Missing"
+    assert guarded["options_flow_rating"] == "Missing"
+    assert "Missing options flow evidence" in guarded["data_warnings"]
+    assert "**Earnings Rating:** Missing" in guarded["markdown_report"]
+    assert "**Sentiment Rating:** Missing" in guarded["markdown_report"]
+    assert "**Options Flow Rating:** Missing" in guarded["markdown_report"]
+    assert "## Data Warnings" in guarded["markdown_report"]
+    assert guarded["bullish_factors"] == ["Strong revenue growth"]

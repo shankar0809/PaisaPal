@@ -5,7 +5,7 @@ from typing import Any
 
 import httpx
 
-from paisapal.providers.base import EvidenceSnapshot
+from paisapal.providers.base import EvidenceSnapshot, redact_url_secrets
 
 BASE_URL = "https://www.alphavantage.co/query"
 
@@ -167,7 +167,7 @@ class AlphaVantageProvider:
             label=f"Alpha Vantage {function}",
             payload={"ticker": ticker, "function": function},
             url=BASE_URL,
-            warnings=[warning],
+            warnings=[redact_url_secrets(warning)],
         )
 
 

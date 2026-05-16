@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 
-from paisapal.ai.client import OpenAiAnalysisClient
+from paisapal.ai.client import build_analysis_client, is_ai_configured, selected_ai_provider
 from paisapal.analysis.rules import analyze
 from paisapal.analysis_runs.orchestrator import AnalysisOrchestrator, configured_providers
 from paisapal.analysis_runs.source_coverage import derive_source_coverage
@@ -125,8 +125,8 @@ def run_analysis(run_id: int, session: Session = Depends(get_session)) -> Analys
     run = get_analysis_run(session, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Analysis run not found")
-    use_live_ai = bool(os.getenv("OPENAI_API_KEY"))
-    ai_client = OpenAiAnalysisClient() if use_live_ai else None
+    ai_client = build_analysis_client()
+    use_live_ai = ai_client is not None
     orchestrator = AnalysisOrchestrator(
         providers=configured_providers(),
         ai_client=ai_client,
@@ -143,32 +143,83 @@ def run_analysis(run_id: int, session: Session = Depends(get_session)) -> Analys
 
 @router.get("/provider-status", response_model=list[ProviderStatusResponse])
 def provider_status() -> list[ProviderStatusResponse]:
-    openai_configured = bool(os.getenv("OPENAI_API_KEY"))
+    ai_provider = selected_ai_provider()
+    ai_configured = is_ai_configured()
+    market_data_mode = os.getenv("MARKET_DATA_MODE", "free").strip().lower()
+    paid_fallback_enabled = os.getenv(
+        "ENABLE_PAID_PROVIDER_FALLBACK",
+        "false",
+    ).strip().lower() in {"1", "true", "yes"}
     provider_config = {
         "polygon": bool(os.getenv("POLYGON_API_KEY")),
         "alpha_vantage": bool(os.getenv("ALPHA_VANTAGE_API_KEY")),
         "fmp": bool(os.getenv("FMP_API_KEY")),
     }
-    has_market_data = any(provider_config.values())
-    live_ready = openai_configured and has_market_data
+    free_provider_config = {
+        "yahoo": market_data_mode == "free",
+        "sec_edgar": market_data_mode == "free",
+        "stooq": market_data_mode == "free" and bool(os.getenv("STOOQ_API_KEY")),
+    }
+    has_market_data = any(free_provider_config.values()) or any(provider_config.values())
+    live_ready = ai_configured and has_market_data
     if live_ready:
         message = "Live AI analysis ready"
-    elif not openai_configured and not has_market_data:
-        message = "Configure OPENAI_API_KEY and at least one market data provider"
-    elif not openai_configured:
-        message = "Configure OPENAI_API_KEY for live AI commentary"
+    elif not ai_configured and not has_market_data:
+        message = (
+            "Configure OPENAI_API_KEY and at least one market data provider"
+            if ai_provider == "openai"
+            else "Configure Ollama AI and at least one market data provider"
+        )
+    elif not ai_configured:
+        message = (
+            "Configure OPENAI_API_KEY for live AI commentary"
+            if ai_provider == "openai"
+            else "Configure Ollama AI for live commentary"
+        )
     else:
         message = "Configure at least one market data provider"
 
-    return [
+    statuses = [
         ProviderStatusResponse(
-            provider="openai",
-            configured=openai_configured,
+            provider=ai_provider,
+            configured=ai_configured,
             role="ai",
             required_for_live=True,
             live_ready=live_ready,
             message=message,
         ),
+    ]
+    if market_data_mode == "free":
+        statuses.extend(
+            [
+                ProviderStatusResponse(
+                    provider="yahoo",
+                    configured=True,
+                    role="market_data",
+                    live_ready=live_ready,
+                    message=message,
+                ),
+                ProviderStatusResponse(
+                    provider="sec_edgar",
+                    configured=True,
+                    role="fundamentals",
+                    live_ready=live_ready,
+                    message=message,
+                ),
+                ProviderStatusResponse(
+                    provider="stooq",
+                    configured=free_provider_config["stooq"],
+                    role="market_data",
+                    live_ready=live_ready,
+                    message=message,
+                ),
+            ]
+        )
+        if not paid_fallback_enabled:
+            return statuses
+
+    statuses.extend(
+        [
         ProviderStatusResponse(
             provider="polygon",
             configured=provider_config["polygon"],
@@ -190,7 +241,9 @@ def provider_status() -> list[ProviderStatusResponse]:
             live_ready=live_ready,
             message=message,
         ),
-    ]
+        ]
+    )
+    return statuses
 
 
 @router.post("/import/preview", response_model=ImportPreviewResponse)

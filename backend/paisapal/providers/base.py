@@ -2,11 +2,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import re
 from typing import Protocol
 
 
 def utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def redact_url_secrets(message: str) -> str:
+    return re.sub(
+        r"(?i)([?&](?:apikey|api_key|token)=)[^&'\"\s]+",
+        r"\1[REDACTED]",
+        message,
+    )
 
 
 @dataclass(frozen=True)

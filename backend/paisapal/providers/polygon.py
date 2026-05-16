@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from paisapal.providers.base import EvidenceSnapshot
+from paisapal.providers.base import EvidenceSnapshot, redact_url_secrets
 
 BASE_URL = "https://api.polygon.io"
 
@@ -198,7 +198,7 @@ class PolygonProvider:
             label=f"Polygon {endpoint}",
             payload={"ticker": ticker, "endpoint": endpoint},
             url=f"{BASE_URL}{path}",
-            warnings=[warning],
+            warnings=[redact_url_secrets(warning)],
         )
 
 
