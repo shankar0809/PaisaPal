@@ -51,13 +51,13 @@ class OllamaAnalysisClient:
         base_url: str | None = None,
         model: str | None = None,
         max_retries: int = 1,
-        timeout: float = 900,
+        timeout: float = 600,
     ) -> None:
         self.http_client = http_client or httpx.Client()
         self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")).rstrip("/")
         self.model = model or os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
         self.max_retries = max_retries
-        self.timeout = timeout
+        self.timeout = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", timeout))
 
     def analyze(self, prompt: str) -> AiReportOutput:
         last_error: Exception | None = None

@@ -38,6 +38,7 @@ export function TickerDetailPage({ ticker }: TickerDetailPageProps) {
 
   const dataWarnings = report.report.data_warnings ?? [];
   const analysisSteps = report.report.analysis_steps ?? [];
+  const vcpSummary = report.report.vcp_summary;
   const markdownReport = report.markdown_report || "No generated report was stored for this ticker.";
 
   return (
@@ -51,6 +52,35 @@ export function TickerDetailPage({ ticker }: TickerDetailPageProps) {
 
       <ReportSection title="Source & Freshness">
         <SourceSummary sources={report.report.source_summary ?? []} />
+      </ReportSection>
+
+      <ReportSection title="VCP Summary">
+        {vcpSummary ? (
+          <dl className="summaryGrid">
+            <div>
+              <dt>Ticker</dt>
+              <dd>{valueText(vcpSummary.ticker)}</dd>
+            </div>
+            <div>
+              <dt>VCP Score</dt>
+              <dd>{valueText(vcpSummary.vcp_score)}</dd>
+            </div>
+            <div>
+              <dt>Stage</dt>
+              <dd>{valueText(vcpSummary.vcp_stage)}</dd>
+            </div>
+            <div>
+              <dt>Tech Output</dt>
+              <dd>{valueText(vcpSummary.tech_output)}</dd>
+            </div>
+            <div>
+              <dt>VCP Rating</dt>
+              <dd>{valueText(vcpSummary.vcp_rating)}</dd>
+            </div>
+          </dl>
+        ) : (
+          <p>No VCP summary was stored for this report.</p>
+        )}
       </ReportSection>
 
       <ReportSection title="Framework Source Coverage">

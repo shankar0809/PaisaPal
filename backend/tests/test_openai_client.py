@@ -135,7 +135,17 @@ def test_ollama_analysis_client_uses_extended_timeout_for_long_reports():
 
     client.analyze("prompt")
 
-    assert fake_http.calls[0]["timeout"] == 900
+    assert fake_http.calls[0]["timeout"] == 180.0
+
+
+def test_ollama_analysis_client_honors_timeout_override(monkeypatch):
+    fake_http = FakeHttpClient([{"response": VALID_REPORT_JSON}])
+    monkeypatch.setenv("OLLAMA_TIMEOUT_SECONDS", "45")
+    client = OllamaAnalysisClient(http_client=fake_http, model="qwen2.5:7b-instruct")
+
+    client.analyze("prompt")
+
+    assert fake_http.calls[0]["timeout"] == 45.0
 
 
 def test_ollama_analysis_client_retries_after_invalid_json_output():

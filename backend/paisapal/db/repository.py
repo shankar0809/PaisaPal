@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from paisapal.analysis.models import AnalysisInput, AnalysisResult
 from paisapal.analysis.report import build_report_payload, render_markdown
+from paisapal.analysis_runs.vcp_summary import build_vcp_summary_from_report
 from paisapal.csv_import.parser import ValidCsvRow
 from paisapal.db.base import Base, engine
 from paisapal.db.models import (
@@ -21,6 +22,15 @@ from paisapal.db.models import (
     SourceSnapshot,
     TickerInput,
 )
+
+_ACTIVE_JOB_STATUSES = {
+    "fetching_market_data",
+    "fetching_fundamentals",
+    "fetching_earnings",
+    "fetching_options",
+    "running_web_research",
+    "running_gpt_analysis",
+}
 
 
 def init_db() -> None:
@@ -153,7 +163,9 @@ def update_analysis_run_status_from_jobs(session: Session, run_id: int) -> Analy
     statuses = set(
         session.scalars(select(AnalysisJob.status).where(AnalysisJob.run_id == run_id))
     )
-    if statuses == {"complete"}:
+    if statuses & _ACTIVE_JOB_STATUSES:
+        run.status = "running"
+    elif statuses == {"complete"}:
         run.status = "complete"
     elif statuses == {"failed"}:
         run.status = "failed"
@@ -179,7 +191,35 @@ def update_job_status(
     job.error_message = error_message
     session.commit()
     session.refresh(job)
+    update_analysis_run_status_from_jobs(session, job.run_id)
     return job
+
+
+def fail_stale_analysis_jobs(
+    session: Session,
+    stale_after_minutes: int = 10,
+    now: datetime | None = None,
+) -> int:
+    reference_time = now or datetime.now(timezone.utc)
+    cutoff = reference_time - timedelta(minutes=stale_after_minutes)
+    stale_jobs = list(
+        session.scalars(
+            select(AnalysisJob).where(
+                AnalysisJob.status.in_(_ACTIVE_JOB_STATUSES),
+                AnalysisJob.updated_at <= cutoff,
+            )
+        )
+    )
+    for job in stale_jobs:
+        job.status = "failed"
+        job.error_message = (
+            f"Analysis job timed out after {stale_after_minutes} minutes waiting for AI analysis."
+        )
+    if stale_jobs:
+        session.commit()
+        for job in stale_jobs:
+            update_analysis_run_status_from_jobs(session, job.run_id)
+    return len(stale_jobs)
 
 
 def _parse_source_retrieved_at(value) -> datetime | None:
@@ -226,6 +266,8 @@ def save_analysis_report(
     analysis_report.sentiment_rating = report.get("sentiment_rating", "")
     analysis_report.options_flow_rating = report.get("options_flow_rating", "")
     analysis_report.risk_reward = report.get("risk_reward")
+    if "vcp_summary" not in report:
+        report["vcp_summary"] = build_vcp_summary_from_report(report, source_snapshots)
     analysis_report.report_json = json.dumps(report)
     analysis_report.markdown_report = report.get("markdown_report", "")
     analysis_report.source_summary_json = json.dumps(source_summary)

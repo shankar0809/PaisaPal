@@ -13,6 +13,7 @@ from paisapal.ai.client import build_analysis_client, is_ai_configured, selected
 from paisapal.analysis.rules import analyze
 from paisapal.analysis_runs.orchestrator import AnalysisOrchestrator, configured_providers
 from paisapal.analysis_runs.source_coverage import derive_source_coverage
+from paisapal.analysis_runs.vcp_summary import build_vcp_summary_from_report
 from paisapal.analysis_runs.validation import parse_tickers
 from paisapal.api.schemas import (
     AnalysisRunCreateRequest,
@@ -30,6 +31,7 @@ from paisapal.db.base import SessionLocal
 from paisapal.db.repository import (
     create_analysis_run,
     create_import_batch,
+    fail_stale_analysis_jobs,
     get_analysis_run,
     get_latest_analysis_run_for_ticker,
     get_history,
@@ -42,6 +44,7 @@ from paisapal.providers.mock import MockProvider
 
 router = APIRouter()
 _PREVIEW_CACHE: dict[str, ParsePreview] = {}
+_STALE_ANALYSIS_MINUTES = 10
 
 
 def get_session():
@@ -79,6 +82,10 @@ def _run_response(run) -> AnalysisRunResponse:
     )
 
 
+def _sweep_stale_analysis_jobs(session: Session) -> None:
+    fail_stale_analysis_jobs(session, stale_after_minutes=_STALE_ANALYSIS_MINUTES)
+
+
 @router.post("/analysis-runs", response_model=AnalysisRunResponse)
 def create_run(
     request: AnalysisRunCreateRequest,
@@ -101,6 +108,7 @@ def create_run(
 
 @router.get("/analysis-runs/{run_id}", response_model=AnalysisRunResponse)
 def analysis_run(run_id: int, session: Session = Depends(get_session)) -> AnalysisRunResponse:
+    _sweep_stale_analysis_jobs(session)
     run = get_analysis_run(session, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Analysis run not found")
@@ -109,11 +117,13 @@ def analysis_run(run_id: int, session: Session = Depends(get_session)) -> Analys
 
 @router.get("/analysis-runs", response_model=list[AnalysisRunResponse])
 def analysis_runs(session: Session = Depends(get_session)) -> list[AnalysisRunResponse]:
+    _sweep_stale_analysis_jobs(session)
     return [_run_response(run) for run in list_analysis_runs(session)]
 
 
 @router.get("/analysis-runs/latest/{ticker}", response_model=AnalysisRunResponse)
 def latest_analysis_run_for_ticker(ticker: str, session: Session = Depends(get_session)) -> AnalysisRunResponse:
+    _sweep_stale_analysis_jobs(session)
     run = get_latest_analysis_run_for_ticker(session, ticker)
     if run is None:
         raise HTTPException(status_code=404, detail="Analysis run not found")
@@ -122,6 +132,7 @@ def latest_analysis_run_for_ticker(ticker: str, session: Session = Depends(get_s
 
 @router.post("/analysis-runs/{run_id}/run-mock", response_model=AnalysisRunResponse)
 def run_mock_analysis(run_id: int, session: Session = Depends(get_session)) -> AnalysisRunResponse:
+    _sweep_stale_analysis_jobs(session)
     run = get_analysis_run(session, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Analysis run not found")
@@ -137,6 +148,7 @@ def run_mock_analysis(run_id: int, session: Session = Depends(get_session)) -> A
 
 @router.post("/analysis-runs/{run_id}/run", response_model=AnalysisRunResponse)
 def run_analysis(run_id: int, session: Session = Depends(get_session)) -> AnalysisRunResponse:
+    _sweep_stale_analysis_jobs(session)
     run = get_analysis_run(session, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Analysis run not found")
@@ -370,6 +382,7 @@ def ticker_report(ticker: str, session: Session = Depends(get_session)) -> Ticke
     if snapshot is None:
         raise HTTPException(status_code=404, detail="Ticker not found")
     report = json.loads(snapshot.report_json)
+    report["vcp_summary"] = build_vcp_summary_from_report(report, _source_evidence_rows(snapshot))
     source_coverage_input = {"source_summary": _source_summary_rows(snapshot, report)}
     return TickerReportResponse(
         ticker=snapshot.ticker,
@@ -396,6 +409,26 @@ def _source_summary_rows(snapshot, report: dict) -> list[dict]:
             for source in sources
         ]
     return report.get("source_summary", [])
+
+
+def _source_evidence_rows(snapshot) -> list[dict]:
+    job = getattr(snapshot, "job", None)
+    sources = getattr(job, "sources", None) if job is not None else None
+    if not sources:
+        return []
+    return [
+        {
+            "provider": source.provider,
+            "source_type": source.source_type,
+            "status": source.status,
+            "label": source.label,
+            "url": source.url,
+            "payload": json.loads(source.payload_json or "{}"),
+            "warnings": json.loads(source.warnings_json or "[]"),
+            "retrieved_at": source.retrieved_at.isoformat(),
+        }
+        for source in sources
+    ]
 
 
 @router.get("/tickers/{ticker}/history", response_model=list[HistoryRowResponse])

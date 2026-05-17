@@ -17,6 +17,13 @@ vi.mock("../api/client", () => ({
       earnings_rating: "Clean setup",
       sentiment_rating: "Bullish and improving",
       options_flow_rating: "Bullish leaning",
+      vcp_summary: {
+        ticker: "MSFT",
+        vcp_score: 9,
+        vcp_stage: "Stage 2",
+        tech_output: "Strong VCP watchlist candidate",
+        vcp_rating: "High-quality VCP",
+      },
       data_warnings: ["Options flow provider returned stale data"],
       source_summary: [
         {
@@ -68,12 +75,16 @@ describe("TickerDetailPage", () => {
   it("renders AI source freshness, step details, data warnings, and generated markdown", async () => {
     render(<TickerDetailPage ticker="MSFT" />);
 
-    expect(await screen.findByText("MSFT")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "MSFT" })).toBeInTheDocument();
     expect(screen.getByText("Source & Freshness")).toBeInTheDocument();
     expect(screen.getByText("Framework Source Coverage")).toBeInTheDocument();
+    expect(screen.getByText("VCP Summary")).toBeInTheDocument();
     expect(screen.getByText("Analysis Step Results")).toBeInTheDocument();
     expect(screen.getByText("VCP / Technical Pattern View")).toBeInTheDocument();
     expect(screen.getByText("Current Stock Context")).toBeInTheDocument();
+    expect(screen.getByText("9")).toBeInTheDocument();
+    expect(screen.getByText("Stage 2")).toBeInTheDocument();
+    expect(screen.getByText("Strong VCP watchlist candidate")).toBeInTheDocument();
     expect(screen.getByText("Polygon daily bars")).toBeInTheDocument();
     expect(screen.getByText("Options chain missing greeks")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Polygon market data" })).toHaveAttribute(

@@ -4,6 +4,7 @@ from collections import defaultdict
 from typing import Any
 
 from paisapal.analysis_runs.source_coverage import SECTION_SOURCE_TYPES
+from paisapal.analysis_runs.vcp_summary import build_vcp_summary_from_report
 from paisapal.providers.base import EvidenceSnapshot
 
 
@@ -109,9 +110,11 @@ def _summary_for_section(section: str, report: dict) -> str:
             f"final view {report.get('final_classification') or report.get('final_decision') or 'Unknown'}."
         )
     if section == "VCP / Technical Pattern View":
+        summary = _vcp_summary(report)
         return (
-            f"Technical rating {report.get('technical_rating', 'Missing')} with "
-            f"VCP rating {report.get('vcp_rating', 'Missing')}."
+            f"{summary['ticker']} sits in {summary['vcp_stage']} with "
+            f"score {summary['vcp_score']}, tech output {summary['tech_output']}, "
+            f"and VCP rating {summary['vcp_rating']}."
         )
     if section == "Entry, Stop-Loss, and Target Zones":
         entry = ", ".join(report.get("entry_zones") or ["None"])
@@ -143,9 +146,13 @@ def _results_for_section(section: str, report: dict) -> dict[str, Any]:
             "final_classification": report.get("final_classification") or report.get("final_decision") or "Unknown",
         }
     if section == "VCP / Technical Pattern View":
+        summary = _vcp_summary(report)
         return {
-            "technical_rating": report.get("technical_rating", "Missing"),
-            "vcp_rating": report.get("vcp_rating", "Missing"),
+            "ticker": summary["ticker"],
+            "vcp_score": summary["vcp_score"],
+            "vcp_stage": summary["vcp_stage"],
+            "tech_output": summary["tech_output"],
+            "vcp_rating": summary["vcp_rating"],
         }
     if section == "Entry, Stop-Loss, and Target Zones":
         return {
@@ -204,3 +211,10 @@ def _format_price(value: Any) -> str:
         return f"{float(value):.2f}"
     except (TypeError, ValueError):
         return "N/A"
+
+
+def _vcp_summary(report: dict) -> dict[str, Any]:
+    summary = report.get("vcp_summary")
+    if isinstance(summary, dict):
+        return summary
+    return build_vcp_summary_from_report(report)

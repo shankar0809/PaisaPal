@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from paisapal.ai.evidence_map import build_framework_evidence_map
 from paisapal.ai.prompts import build_framework_prompt
 from paisapal.ai.schemas import validate_ai_report
+from paisapal.analysis_runs.vcp_summary import build_vcp_summary_from_report
 from paisapal.analysis_runs.evidence_guard import enforce_missing_evidence_ratings
 from paisapal.analysis_runs.source_coverage import derive_source_coverage
 from paisapal.analysis_runs.step_details import build_analysis_steps
@@ -123,7 +124,7 @@ def test_build_framework_prompt_includes_framework_evidence_map_and_quality_rule
         evidence=evidence,
     )
 
-    assert "Framework evidence map:" in prompt
+    assert "Framework section expectations:" in prompt
     assert "2. VCP / Technical Pattern View" in prompt
     assert "Use source-backed commentary in every framework section" in prompt
     assert "If evidence is missing or weak, say so explicitly" in prompt
@@ -206,11 +207,61 @@ def test_build_analysis_steps_includes_section_results_and_sources():
 
     assert by_section["Current Stock Context"]["status"] == "covered"
     assert by_section["Current Stock Context"]["results"]["current_price"] == "211.50"
-    assert by_section["VCP / Technical Pattern View"]["results"]["technical_rating"] == "Constructive"
+    assert by_section["VCP / Technical Pattern View"]["results"]["ticker"] == "NVDA"
+    assert by_section["VCP / Technical Pattern View"]["results"]["vcp_score"] == 5
+    assert by_section["VCP / Technical Pattern View"]["results"]["vcp_stage"] == "Stage 3"
+    assert by_section["VCP / Technical Pattern View"]["results"]["tech_output"] == "VCP watchlist candidate"
+    assert by_section["VCP / Technical Pattern View"]["results"]["vcp_rating"] == "Watchlist candidate"
     assert {source["provider"] for source in by_section["Current Stock Context"]["sources"]} >= {
         "yahoo",
         "sec_edgar",
     }
+
+
+def test_build_vcp_summary_from_report_scores_rich_contraction_patterns():
+    bars = []
+    for day in range(40):
+        if day < 20:
+            close = 70 + day * 0.8
+            volume = 100000 + day * 1000
+            high = close + 4
+            low = close - 4
+        else:
+            close = 90 + (day - 20) * 0.25
+            volume = 60000 + (day - 20) * 500
+            high = close + 2
+            low = close - 2
+        bars.append({"close": close, "high": high, "low": low, "volume": volume})
+
+    report = {
+        "ticker": "MSFT",
+        "current_price": 95,
+        "vcp_rating": "Positive",
+        "technical_rating": "Strong Buy",
+    }
+    evidence = [
+        EvidenceSnapshot(
+            provider="yahoo",
+            source_type="technicals",
+            status="fresh",
+            label="Yahoo Finance daily bars",
+            payload={
+                "ticker": "MSFT",
+                "latest_close": 95,
+                "sma_20": 94,
+                "sma_50": 90,
+                "range_high": 98,
+                "range_low": 68,
+                "bars": bars,
+            },
+        )
+    ]
+
+    summary = build_vcp_summary_from_report(report, evidence)
+
+    assert summary["vcp_score"] >= 7.5
+    assert summary["vcp_stage"] == "Stage 2"
+    assert summary["tech_output"] == "Strong VCP watchlist candidate"
 
 
 def test_enforce_missing_evidence_ratings_overrides_unsupported_ai_claims():
@@ -333,3 +384,97 @@ def test_enforce_missing_evidence_ratings_rewrites_stale_trade_plan_prices():
     assert guarded["position_sizing"] == []
     assert "Current Price: $225.32" in guarded["markdown_report"]
     assert "## Current Stock Context" in guarded["markdown_report"]
+
+
+def test_enforce_missing_evidence_ratings_aligns_recovery_setups():
+    report = valid_report()
+    report["final_classification"] = "Buy / Enter"
+    report["confidence"] = "High"
+    report["technical_rating"] = "Strong Buy"
+    report["vcp_rating"] = "Positive"
+    report["options_flow_rating"] = "Missing"
+    report["bullish_factors"] = ["Strong revenue growth"]
+    report["bearish_risks"] = ["Intense competition in the industry"]
+    evidence = [
+        EvidenceSnapshot(
+            provider="yahoo",
+            source_type="market",
+            status="fresh",
+            label="Yahoo Finance chart quote",
+            payload={"ticker": "CRM", "session": {"price": 173.51}},
+        ),
+        EvidenceSnapshot(
+            provider="yahoo",
+            source_type="technicals",
+            status="fresh",
+            label="Yahoo Finance daily bars",
+            payload={
+                "ticker": "CRM",
+                "latest_close": 173.51,
+                "sma_20": 179.763,
+                "sma_50": 183.8232,
+                "range_high": 269.11,
+                "range_low": 163.52,
+            },
+        ),
+    ]
+
+    guarded = enforce_missing_evidence_ratings(report, evidence)
+
+    assert guarded["final_classification"] == "Watchlist"
+    assert guarded["confidence"] == "Medium"
+    assert guarded["technical_rating"] == "Recovery / base-building"
+    assert guarded["vcp_rating"] == "Watchlist candidate"
+    assert guarded["entry_zones"] == [
+        "Break and hold above $185-190",
+        "Pullback to $167-$170",
+    ]
+    assert guarded["stop_zones"] == ["Below $160"]
+    assert guarded["target_zones"] == ["$200-$205", "$220-$230"]
+    assert guarded["bullish_factors"][0] == "Strong earnings and cash flow support a recovery setup"
+    assert "## Final View" in guarded["markdown_report"]
+
+
+def test_enforce_missing_evidence_ratings_keeps_breakouts_actionable():
+    report = valid_report()
+    report["final_classification"] = "Watchlist"
+    report["confidence"] = "Medium"
+    report["technical_rating"] = "Constructive"
+    report["vcp_rating"] = "Watchlist candidate"
+    report["options_flow_rating"] = "Bullish leaning"
+    report["bullish_factors"] = ["Strong revenue growth"]
+    report["bearish_risks"] = ["Crowded expectations"]
+    evidence = [
+        EvidenceSnapshot(
+            provider="yahoo",
+            source_type="market",
+            status="fresh",
+            label="Yahoo Finance chart quote",
+            payload={"ticker": "ABC", "session": {"price": 205.0}},
+        ),
+        EvidenceSnapshot(
+            provider="yahoo",
+            source_type="technicals",
+            status="fresh",
+            label="Yahoo Finance daily bars",
+            payload={
+                "ticker": "ABC",
+                "latest_close": 205.0,
+                "sma_20": 198.0,
+                "sma_50": 196.0,
+                "range_high": 204.5,
+                "range_low": 160.0,
+            },
+        ),
+    ]
+
+    guarded = enforce_missing_evidence_ratings(report, evidence)
+
+    assert guarded["final_classification"] == "Buy / Enter"
+    assert guarded["confidence"] == "High"
+    assert guarded["technical_rating"] == "Breakout / trending"
+    assert guarded["vcp_rating"] == "High-quality VCP"
+    assert guarded["entry_zones"] == ["Break and hold above $200-205"]
+    assert guarded["stop_zones"] == ["Below $190"]
+    assert guarded["target_zones"] == ["$220-$225", "$240-$250"]
+    assert guarded["bullish_factors"][0] == "Price is confirming above key moving averages and pivot resistance"

@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from paisapal.analysis.models import AnalysisInput, AnalysisResult
+from paisapal.analysis_runs.vcp_summary import build_vcp_summary_from_analysis
 
 
 def build_report_payload(data: AnalysisInput, result: AnalysisResult) -> dict:
-    return {"input": data.model_dump(), "analysis": result.model_dump()}
+    analysis = result.model_dump()
+    analysis["vcp_summary"] = build_vcp_summary_from_analysis(data, result)
+    return {"input": data.model_dump(), "analysis": analysis}
 
 
 def render_markdown(data: AnalysisInput, result: AnalysisResult) -> str:
+    vcp_summary = build_vcp_summary_from_analysis(data, result)
     return f"""# {data.ticker} Investment Analysis
 
 This report is informational only and is not financial advice.
@@ -19,10 +23,13 @@ This report is informational only and is not financial advice.
 - Support: {data.context.support}
 - Resistance: {data.context.resistance}
 
-## Technical Setup
+## VCP / Technical Pattern Framework
 
-- VCP Score: {result.vcp_score}
-- VCP Rating: {result.vcp_rating}
+- Ticker: {vcp_summary["ticker"]}
+- VCP Score: {vcp_summary["vcp_score"]}
+- Stage: {vcp_summary["vcp_stage"]}
+- Tech Output: {vcp_summary["tech_output"]}
+- VCP Rating: {vcp_summary["vcp_rating"]}
 
 ## Trade Plan
 

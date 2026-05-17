@@ -73,6 +73,13 @@ export type TickerReport = {
     earnings_rating?: string;
     sentiment_rating?: string;
     options_flow_rating?: string;
+    vcp_summary?: {
+      ticker: string;
+      vcp_score: number;
+      vcp_stage: string;
+      tech_output: string;
+      vcp_rating: string;
+    };
     data_warnings?: string[];
     source_summary?: SourceSummaryItem[];
     analysis_steps?: Array<{

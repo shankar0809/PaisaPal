@@ -6,6 +6,7 @@ from paisapal.analysis.models import (
     TradePlan,
     VcpInput,
 )
+from paisapal.analysis.report import build_report_payload, render_markdown
 from paisapal.analysis.rules import analyze
 
 
@@ -83,3 +84,18 @@ def test_analyze_avoids_when_stop_is_invalid():
 
     assert result.final_decision == "Avoid"
     assert "stop_loss must be below entry" in result.warnings
+
+
+def test_render_markdown_includes_vcp_summary_and_stage():
+    data = strong_input()
+    result = analyze(data, account_size=100000, risk_percent=0.5)
+
+    markdown = render_markdown(data, result)
+    payload = build_report_payload(data, result)
+
+    assert "- Ticker: MSFT" in markdown
+    assert "- VCP Score: 9" in markdown
+    assert "- Stage: Stage 2" in markdown
+    assert "- Tech Output: Strong VCP watchlist candidate" in markdown
+    assert payload["analysis"]["vcp_summary"]["vcp_score"] == 9
+    assert payload["analysis"]["vcp_summary"]["vcp_stage"] == "Stage 2"

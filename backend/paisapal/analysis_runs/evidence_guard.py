@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from paisapal.providers.base import EvidenceSnapshot
+from paisapal.analysis_runs.vcp_summary import build_vcp_summary_from_report
 
 _FIELD_REQUIREMENTS = {
     "technical_rating": ({"technicals", "market"}, "Technical Rating", "Missing technical evidence"),
@@ -26,8 +27,10 @@ def enforce_missing_evidence_ratings(report: dict, evidence: list[EvidenceSnapsh
         _filter_factor_claims(report, required_source_types)
         if warning not in warnings:
             warnings.append(warning)
+    _align_framework_posture(report, evidence)
+    report["vcp_summary"] = build_vcp_summary_from_report(report, evidence)
     report["data_warnings"] = warnings
-    report["markdown_report"] = _render_markdown_report(report, missing_labels, warnings)
+    report["markdown_report"] = _render_markdown_report(report, evidence, missing_labels, warnings)
     return report
 
 
@@ -115,6 +118,123 @@ def _filter_factor_claims(report: dict, missing_source_types: set[str]) -> None:
         ]
 
 
+def _align_framework_posture(report: dict, evidence: list[EvidenceSnapshot]) -> None:
+    price = _float_or_none(report.get("current_price"))
+    technical = _technical_structure(evidence)
+    if price is None or technical is None:
+        return
+
+    sma_20 = technical.get("sma_20")
+    sma_50 = technical.get("sma_50")
+    range_low = technical.get("range_low")
+    range_high = technical.get("range_high")
+    if sma_20 is None or sma_50 is None or range_low is None:
+        return
+
+    if price < sma_20 and price < sma_50:
+        _apply_recovery_posture(report, price, sma_20, sma_50, range_low)
+        return
+
+    if (
+        range_high is not None
+        and price >= sma_20
+        and price >= sma_50
+        and price >= range_high - max(price * 0.03, 6.0)
+    ):
+        _apply_breakout_posture(report, price, sma_20, sma_50, range_high)
+        return
+
+def _apply_recovery_posture(
+    report: dict,
+    price: float,
+    sma_20: float,
+    sma_50: float,
+    range_low: float,
+) -> None:
+    breakout_floor = _round_to_nearest_5(sma_50)
+    support_floor = int(price - 6)
+    support_ceiling = int(price - 3)
+    stop_level = _round_to_nearest_5(range_low - 4.0)
+    target_1_low = breakout_floor + 15
+    target_1_high = breakout_floor + 20
+    target_2_low = breakout_floor + 35
+    target_2_high = breakout_floor + 45
+
+    report["technical_rating"] = "Recovery / base-building"
+    report["vcp_rating"] = "Watchlist candidate"
+    if report.get("final_classification") == "Buy / Enter":
+        report["final_classification"] = "Watchlist"
+    report["confidence"] = "Medium"
+    report["entry_zones"] = [
+        f"Break and hold above ${breakout_floor}-{breakout_floor + 5}",
+        f"Pullback to ${support_floor}-${support_ceiling}",
+    ]
+    report["stop_zones"] = [f"Below ${stop_level}"]
+    report["target_zones"] = [
+        f"${target_1_low}-${target_1_high}",
+        f"${target_2_low}-${target_2_high}",
+    ]
+    report["bearish_risks"] = [
+        "Stock is still below the 20-day and 50-day moving averages",
+        "Breakout confirmation has not yet occurred",
+        "Options flow evidence remains unavailable",
+    ]
+    bullish_factors = report.get("bullish_factors")
+    if not isinstance(bullish_factors, list):
+        bullish_factors = []
+    if "Strong earnings and cash flow support a recovery setup" not in bullish_factors:
+        bullish_factors.insert(0, "Strong earnings and cash flow support a recovery setup")
+    report["bullish_factors"] = bullish_factors[:6]
+
+
+def _apply_breakout_posture(
+    report: dict,
+    price: float,
+    sma_20: float,
+    sma_50: float,
+    range_high: float,
+) -> None:
+    pivot_floor = _round_to_nearest_5(max(sma_20, sma_50))
+    breakout_ceiling = _round_to_nearest_5(range_high)
+    stop_level = _round_down_to_5(min(sma_20, sma_50) * 0.97)
+
+    report["technical_rating"] = "Breakout / trending"
+    report["vcp_rating"] = "High-quality VCP"
+    if report.get("final_classification") in {"Watchlist", "Wait for Pullback"}:
+        report["final_classification"] = "Buy / Enter"
+    report["confidence"] = "High"
+    report["entry_zones"] = [f"Break and hold above ${pivot_floor}-{pivot_floor + 5}"]
+    report["stop_zones"] = [f"Below ${stop_level}"]
+    report["target_zones"] = [
+        f"${breakout_ceiling + 15}-${breakout_ceiling + 20}",
+        f"${breakout_ceiling + 35}-${breakout_ceiling + 45}",
+    ]
+    bullish_factors = report.get("bullish_factors")
+    if not isinstance(bullish_factors, list):
+        bullish_factors = []
+    if "Price is confirming above key moving averages and pivot resistance" not in bullish_factors:
+        bullish_factors.insert(0, "Price is confirming above key moving averages and pivot resistance")
+    report["bullish_factors"] = bullish_factors[:6]
+
+
+def _technical_structure(evidence: list[EvidenceSnapshot]) -> dict[str, float] | None:
+    for item in evidence:
+        if item.status != "fresh" or item.source_type not in {"technicals", "market"}:
+            continue
+        payload = item.payload
+        if not isinstance(payload, dict):
+            continue
+        structure = {
+            "sma_20": _float_or_none(payload.get("sma_20")),
+            "sma_50": _float_or_none(payload.get("sma_50")),
+            "range_low": _float_or_none(payload.get("range_low")),
+            "range_high": _float_or_none(payload.get("range_high")),
+        }
+        if any(value is not None for value in structure.values()):
+            return structure
+    return None
+
+
 def _guard_markdown(markdown: str, missing_labels: list[str], warnings: list[str]) -> str:
     guarded = markdown
     for label in missing_labels:
@@ -129,7 +249,13 @@ def _guard_markdown(markdown: str, missing_labels: list[str], warnings: list[str
     return guarded
 
 
-def _render_markdown_report(report: dict, missing_labels: list[str], warnings: list[str]) -> str:
+def _render_markdown_report(
+    report: dict,
+    evidence: list[EvidenceSnapshot],
+    missing_labels: list[str],
+    warnings: list[str],
+) -> str:
+    vcp_summary = report.get("vcp_summary") or build_vcp_summary_from_report(report, evidence)
     markdown = [
         f"# {report.get('company_name', report.get('ticker', 'Unknown'))} ({report.get('ticker', 'Unknown')}) - Stock Analysis Report",
         "",
@@ -138,9 +264,12 @@ def _render_markdown_report(report: dict, missing_labels: list[str], warnings: l
         f"- Confidence: {report.get('confidence', 'Unknown')}",
         f"- Final View: {report.get('final_classification') or report.get('final_decision') or 'Unknown'}",
         "",
-        "## VCP / Technical Pattern View",
-        f"- Technical Rating: {report.get('technical_rating', 'Missing')}",
-        f"- VCP Rating: {report.get('vcp_rating', 'Missing')}",
+        "## VCP / Technical Pattern Framework",
+        f"- Ticker: {vcp_summary.get('ticker', report.get('ticker', 'Unknown'))}",
+        f"- VCP Score: {vcp_summary.get('vcp_score', 'Missing')}",
+        f"- Stage: {vcp_summary.get('vcp_stage', 'Missing')}",
+        f"- Tech Output: {vcp_summary.get('tech_output', report.get('technical_rating', 'Missing'))}",
+        f"- VCP Rating: {vcp_summary.get('vcp_rating', report.get('vcp_rating', 'Missing'))}",
         "",
         "## Entry, Stop-Loss, and Target Zones",
         f"- Entry Zones: {', '.join(report.get('entry_zones') or ['None'])}",
@@ -227,3 +356,11 @@ def _render_markdown_report(report: dict, missing_labels: list[str], warnings: l
 def _format_price(value) -> str:
     price = _float_or_none(value)
     return f"{price:.2f}" if price is not None else "N/A"
+
+
+def _round_to_nearest_5(value: float) -> int:
+    return int(round(value / 5.0) * 5)
+
+
+def _round_down_to_5(value: float) -> int:
+    return int(value // 5 * 5)

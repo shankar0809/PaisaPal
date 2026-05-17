@@ -39,6 +39,10 @@ def build_framework_prompt(
         for item in evidence
     ]
     framework_evidence_map = build_framework_evidence_map(evidence)
+    framework_section_summary = {
+        item["section"]: item["expected_source_types"]
+        for item in framework_evidence_map
+    }
     return "\n".join(
         [
             f"Run the PaisaPal investment framework for ticker {ticker}.",
@@ -51,7 +55,7 @@ def build_framework_prompt(
             json.dumps(REPORT_SECTIONS),
             "Final classification must be one of: Buy / Enter, Watchlist, Wait for Pullback, Avoid, Reduce, Exit.",
             f"User risk settings: {settings.model_dump_json()}",
-            f"Framework evidence map: {json.dumps(framework_evidence_map)}",
+            f"Framework section expectations: {json.dumps(framework_section_summary)}",
             f"Evidence: {json.dumps(evidence_payload)}",
         ]
     )

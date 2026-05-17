@@ -1,6 +1,6 @@
 import json
 import warnings
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.exc import SAWarning
@@ -13,6 +13,7 @@ from paisapal.db.models import AnalysisReport, SourceSnapshot
 from paisapal.db.repository import (
     create_analysis_run,
     create_import_batch,
+    fail_stale_analysis_jobs,
     get_analysis_run,
     get_history,
     get_latest_report,
@@ -209,6 +210,36 @@ def test_update_analysis_run_status_from_jobs_marks_partial_for_mixed_outcomes()
     updated = update_analysis_run_status_from_jobs(session, run.id)
 
     assert updated.status == "partial"
+
+
+def test_update_job_status_marks_parent_run_running_for_active_jobs():
+    session = session_factory()
+    run = create_analysis_run(session, ["NVDA"], 100000, 0.5, None, "")
+
+    update_job_status(session, run.jobs[0].id, "running_gpt_analysis")
+
+    updated = get_analysis_run(session, run.id)
+    assert updated is not None
+    assert updated.status == "running"
+
+
+def test_fail_stale_analysis_jobs_marks_overdue_active_jobs_failed():
+    session = session_factory()
+    run = create_analysis_run(session, ["NVDA"], 100000, 0.5, None, "")
+    job = run.jobs[0]
+    update_job_status(session, job.id, "running_gpt_analysis")
+    session.refresh(job)
+    job.updated_at = datetime.now(timezone.utc) - timedelta(minutes=11)
+    session.commit()
+
+    failed_count = fail_stale_analysis_jobs(session, stale_after_minutes=10)
+    refreshed = get_analysis_run(session, run.id)
+
+    assert failed_count == 1
+    assert refreshed is not None
+    assert refreshed.status == "failed"
+    assert refreshed.jobs[0].status == "failed"
+    assert "timed out after 10 minutes" in (refreshed.jobs[0].error_message or "")
 
 
 def test_update_analysis_run_status_from_jobs_marks_failed_when_all_jobs_fail():
