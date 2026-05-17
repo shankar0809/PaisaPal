@@ -114,6 +114,19 @@ def test_latest_analysis_run_for_ticker_returns_most_recent_run(client):
     assert [job["ticker"] for job in body["jobs"]] == ["NVDA", "AAPL"]
 
 
+def test_analysis_runs_lists_recent_runs(client):
+    first = client.post("/api/analysis-runs", json={"tickers": "NVDA"}).json()
+    second = client.post("/api/analysis-runs", json={"tickers": "AAPL"}).json()
+
+    response = client.get("/api/analysis-runs")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [run["id"] for run in body] == [second["id"], first["id"]]
+    assert body[0]["tickers"] == ["AAPL"]
+    assert body[1]["tickers"] == ["NVDA"]
+
+
 def test_ticker_report_includes_framework_source_coverage(client):
     created = client.post("/api/analysis-runs", json={"tickers": "NVDA"}).json()
     client.post(f"/api/analysis-runs/{created['id']}/run-mock")

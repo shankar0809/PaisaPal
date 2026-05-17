@@ -10,7 +10,7 @@ type Route =
   | { name: "dashboard" }
   | { name: "analyze" }
   | { name: "run"; runId: number }
-  | { name: "history"; ticker?: string }
+  | { name: "history" }
   | { name: "ticker"; ticker: string };
 
 export function routeFromHash(hashValue = window.location.hash): Route {
@@ -18,7 +18,6 @@ export function routeFromHash(hashValue = window.location.hash): Route {
   if (hash === "analyze") return { name: "analyze" };
   const runMatch = hash.match(/^runs\/([1-9]\d*)$/);
   if (runMatch) return { name: "run", runId: Number(runMatch[1]) };
-  if (hash.startsWith("history/")) return { name: "history", ticker: hash.split("/")[1] };
   if (hash === "history") return { name: "history" };
   if (hash.startsWith("ticker/")) return { name: "ticker", ticker: hash.split("/")[1] };
   return { name: "dashboard" };
@@ -56,7 +55,7 @@ export function App() {
         {route.name === "dashboard" && <DashboardPage />}
         {route.name === "analyze" && <AnalyzePage />}
         {route.name === "run" && <RunProgressPage runId={route.runId} />}
-        {route.name === "history" && <HistoryPage ticker={route.ticker} />}
+        {route.name === "history" && <HistoryPage />}
         {route.name === "ticker" && <TickerDetailPage ticker={route.ticker} />}
       </main>
     </div>

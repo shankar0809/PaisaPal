@@ -35,6 +35,7 @@ from paisapal.db.repository import (
     get_history,
     get_latest_report,
     get_latest_watchlist,
+    list_analysis_runs,
     update_analysis_run_status_from_jobs,
 )
 from paisapal.providers.mock import MockProvider
@@ -104,6 +105,11 @@ def analysis_run(run_id: int, session: Session = Depends(get_session)) -> Analys
     if run is None:
         raise HTTPException(status_code=404, detail="Analysis run not found")
     return _run_response(run)
+
+
+@router.get("/analysis-runs", response_model=list[AnalysisRunResponse])
+def analysis_runs(session: Session = Depends(get_session)) -> list[AnalysisRunResponse]:
+    return [_run_response(run) for run in list_analysis_runs(session)]
 
 
 @router.get("/analysis-runs/latest/{ticker}", response_model=AnalysisRunResponse)

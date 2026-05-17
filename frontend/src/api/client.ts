@@ -64,6 +64,12 @@ export async function fetchLatestAnalysisRunForTicker(ticker: string): Promise<A
   return response.json();
 }
 
+export async function fetchAnalysisRuns(): Promise<AnalysisRun[]> {
+  const response = await fetch("/api/analysis-runs");
+  if (!response.ok) throw await errorFromResponse(response, "Failed to load analysis runs");
+  return response.json();
+}
+
 export async function createAnalysisRun(payload: CreateAnalysisRunPayload): Promise<AnalysisRun> {
   const response = await fetch("/api/analysis-runs", {
     method: "POST",

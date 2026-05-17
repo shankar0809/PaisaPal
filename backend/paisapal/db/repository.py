@@ -6,6 +6,7 @@ from datetime import datetime
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm import selectinload
 
 from paisapal.analysis.models import AnalysisInput, AnalysisResult
 from paisapal.analysis.report import build_report_payload, render_markdown
@@ -105,6 +106,17 @@ def create_analysis_run(
 
 def get_analysis_run(session: Session, run_id: int) -> AnalysisRun | None:
     return session.get(AnalysisRun, run_id)
+
+
+def list_analysis_runs(session: Session, limit: int = 25) -> list[AnalysisRun]:
+    return list(
+        session.scalars(
+            select(AnalysisRun)
+            .options(selectinload(AnalysisRun.jobs))
+            .order_by(AnalysisRun.created_at.desc())
+            .limit(limit)
+        ).all()
+    )
 
 
 def get_latest_analysis_run_for_ticker(session: Session, ticker: str) -> AnalysisRun | None:
