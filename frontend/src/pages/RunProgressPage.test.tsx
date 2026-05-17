@@ -1,10 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JobStatusTable } from "../components/JobStatusTable";
 import { RunProgressPage } from "./RunProgressPage";
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe("JobStatusTable", () => {
@@ -68,8 +69,75 @@ describe("RunProgressPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Run Analysis" }));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenLastCalledWith("/api/analysis-runs/7/run", { method: "POST" });
+      expect(fetchMock).toHaveBeenCalledWith("/api/analysis-runs/7/run", { method: "POST" });
     });
-    expect(await screen.findByText("complete")).toBeInTheDocument();
+    expect(await screen.findByText("1 of 1 complete")).toBeInTheDocument();
+  });
+
+  it("polls and displays run progress while analysis is running", async () => {
+    let resolveRun: (response: Response) => void = () => undefined;
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 7,
+          status: "queued",
+          tickers: ["NVDA"],
+          account_size: 100000,
+          risk_percent: 0.5,
+          max_dollar_risk: null,
+          notes: "",
+          created_at: "2026-05-15T12:00:00",
+          jobs: [{ id: 1, ticker: "NVDA", status: "queued", error_message: null }]
+        })
+      })
+      .mockReturnValueOnce(new Promise<Response>((resolve) => {
+        resolveRun = resolve;
+      }))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 7,
+          status: "running",
+          tickers: ["NVDA"],
+          account_size: 100000,
+          risk_percent: 0.5,
+          max_dollar_risk: null,
+          notes: "",
+          created_at: "2026-05-15T12:00:00",
+          jobs: [{ id: 1, ticker: "NVDA", status: "running_gpt_analysis", error_message: null }]
+        })
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<RunProgressPage runId={7} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Run Analysis" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+
+    expect(await screen.findAllByText("running gpt analysis")).toHaveLength(2);
+    expect(screen.getByText("Run Status")).toBeInTheDocument();
+    expect(screen.getByText("1 of 1 active")).toBeInTheDocument();
+
+    await act(async () => {
+      resolveRun({
+        ok: true,
+        json: async () => ({
+          id: 7,
+          status: "complete",
+          tickers: ["NVDA"],
+          account_size: 100000,
+          risk_percent: 0.5,
+          max_dollar_risk: null,
+          notes: "",
+          created_at: "2026-05-15T12:00:00",
+          jobs: [{ id: 1, ticker: "NVDA", status: "complete", error_message: null }]
+        })
+      } as Response);
+    });
+    expect(screen.getByText("1 of 1 complete")).toBeInTheDocument();
   });
 });

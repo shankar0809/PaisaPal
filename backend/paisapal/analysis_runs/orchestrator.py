@@ -9,14 +9,19 @@ from paisapal.ai.prompts import build_framework_prompt
 from paisapal.analysis_runs.evidence_guard import enforce_missing_evidence_ratings
 from paisapal.analysis_runs.models import AnalysisRunSettings
 from paisapal.analysis_runs.mock_pipeline import build_mock_report
+from paisapal.analysis_runs.step_details import build_analysis_steps, render_analysis_steps_markdown
 from paisapal.db.repository import save_analysis_report, update_job_status
 from paisapal.providers.base import MarketDataProvider
 from paisapal.providers.alpha_vantage import AlphaVantageProvider
+from paisapal.providers.finnhub import FinnhubProvider
 from paisapal.providers.fmp import FmpProvider
+from paisapal.providers.fred import FredProvider
 from paisapal.providers.mock import MockProvider
 from paisapal.providers.polygon import PolygonProvider
 from paisapal.providers.sec_edgar import SecEdgarProvider
+from paisapal.providers.simfin import SimFinProvider
 from paisapal.providers.stooq import StooqProvider
+from paisapal.providers.tiingo import TiingoProvider
 from paisapal.providers.yahoo import YahooFinanceProvider
 
 
@@ -39,7 +44,15 @@ def configured_providers() -> list[MarketDataProvider]:
 
 def _configured_paid_providers() -> list[MarketDataProvider]:
     providers: list[MarketDataProvider] = []
-    for provider in [AlphaVantageProvider(), FmpProvider(), PolygonProvider()]:
+    for provider in [
+        AlphaVantageProvider(),
+        FmpProvider(),
+        PolygonProvider(),
+        TiingoProvider(),
+        FinnhubProvider(),
+        SimFinProvider(),
+        FredProvider(),
+    ]:
         if provider.api_key:
             providers.append(provider)
     return providers
@@ -76,6 +89,14 @@ class AnalysisOrchestrator:
             else:
                 report = build_mock_report(job.ticker)
             report = enforce_missing_evidence_ratings(report, evidence)
+            report["analysis_steps"] = build_analysis_steps(report, evidence)
+            report["markdown_report"] = "\n\n".join(
+                part for part in [
+                    report.get("markdown_report", "").rstrip(),
+                    render_analysis_steps_markdown(report["analysis_steps"]),
+                ]
+                if part
+            )
             report["source_summary"] = [
                 {
                     "provider": item.provider,

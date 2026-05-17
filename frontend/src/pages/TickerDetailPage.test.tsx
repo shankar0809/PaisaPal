@@ -28,6 +28,20 @@ vi.mock("../api/client", () => ({
           warnings: []
         }
       ],
+      analysis_steps: [
+        {
+          section: "Current Stock Context",
+          status: "covered",
+          summary: "Price $420.00, confidence High, final view Buy / Enter.",
+          results: {
+            current_price: "420.00",
+            confidence: "High",
+            final_classification: "Buy / Enter"
+          },
+          sources: [{ provider: "polygon", source_type: "market", status: "fresh", label: "Polygon market data" }],
+          warnings: []
+        }
+      ],
       input: { ticker: "MSFT", current_price: 420 },
       analysis: { final_decision: "Buy / Enter" }
     },
@@ -51,13 +65,15 @@ vi.mock("../api/client", () => ({
 }));
 
 describe("TickerDetailPage", () => {
-  it("renders AI source freshness, data warnings, and generated markdown", async () => {
+  it("renders AI source freshness, step details, data warnings, and generated markdown", async () => {
     render(<TickerDetailPage ticker="MSFT" />);
 
     expect(await screen.findByText("MSFT")).toBeInTheDocument();
     expect(screen.getByText("Source & Freshness")).toBeInTheDocument();
     expect(screen.getByText("Framework Source Coverage")).toBeInTheDocument();
+    expect(screen.getByText("Analysis Step Results")).toBeInTheDocument();
     expect(screen.getByText("VCP / Technical Pattern View")).toBeInTheDocument();
+    expect(screen.getByText("Current Stock Context")).toBeInTheDocument();
     expect(screen.getByText("Polygon daily bars")).toBeInTheDocument();
     expect(screen.getByText("Options chain missing greeks")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Polygon market data" })).toHaveAttribute(

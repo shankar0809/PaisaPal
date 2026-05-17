@@ -42,56 +42,81 @@ class FmpProvider:
             ("earnings", 8),
         ]
         payloads: dict[str, Any] = {}
+        errors: list[EvidenceSnapshot] = []
         for endpoint, limit in endpoints:
             try:
                 payload = self._request(endpoint, ticker, limit=limit)
             except Exception as exc:
-                return [self._error_snapshot(ticker, endpoint, str(exc))]
+                error = self._error_snapshot(ticker, endpoint, str(exc))
+                if not payloads:
+                    return [error]
+                errors.append(error)
+                continue
 
             provider_warning = self._provider_warning(payload)
             if provider_warning:
-                return [self._error_snapshot(ticker, endpoint, provider_warning)]
+                error = self._error_snapshot(ticker, endpoint, provider_warning)
+                if not payloads:
+                    return [error]
+                errors.append(error)
+                continue
             payloads[endpoint] = payload
 
-        return [
-            EvidenceSnapshot(
-                provider=self.name,
-                source_type="fundamentals",
-                status="fresh",
-                label="FMP company profile",
-                payload=self._normalize_fundamentals(ticker, payloads["profile"]),
-                url=f"{BASE_URL}/profile",
-            ),
-            EvidenceSnapshot(
-                provider=self.name,
-                source_type="financials",
-                status="fresh",
-                label="FMP financial statements",
-                payload=self._normalize_financials(
-                    ticker,
-                    payloads["income-statement"],
-                    payloads["balance-sheet-statement"],
-                    payloads["cash-flow-statement"],
-                ),
-                url=f"{BASE_URL}/income-statement",
-            ),
-            EvidenceSnapshot(
-                provider=self.name,
-                source_type="ratios",
-                status="fresh",
-                label="FMP ratios and financial scores",
-                payload=self._normalize_ratios(ticker, payloads["ratios"], payloads["key-metrics"], payloads["financial-scores"]),
-                url=f"{BASE_URL}/ratios",
-            ),
-            EvidenceSnapshot(
-                provider=self.name,
-                source_type="earnings",
-                status="fresh",
-                label="FMP earnings",
-                payload=self._normalize_earnings(ticker, payloads["earnings"]),
-                url=f"{BASE_URL}/earnings",
-            ),
-        ]
+        evidence: list[EvidenceSnapshot] = []
+        if "profile" in payloads:
+            evidence.append(
+                EvidenceSnapshot(
+                    provider=self.name,
+                    source_type="fundamentals",
+                    status="fresh",
+                    label="FMP company profile",
+                    payload=self._normalize_fundamentals(ticker, payloads["profile"]),
+                    url=f"{BASE_URL}/profile",
+                )
+            )
+        if {
+            "income-statement",
+            "balance-sheet-statement",
+            "cash-flow-statement",
+        }.issubset(payloads):
+            evidence.append(
+                EvidenceSnapshot(
+                    provider=self.name,
+                    source_type="financials",
+                    status="fresh",
+                    label="FMP financial statements",
+                    payload=self._normalize_financials(
+                        ticker,
+                        payloads["income-statement"],
+                        payloads["balance-sheet-statement"],
+                        payloads["cash-flow-statement"],
+                    ),
+                    url=f"{BASE_URL}/income-statement",
+                )
+            )
+        if {"ratios", "key-metrics", "financial-scores"}.issubset(payloads):
+            evidence.append(
+                EvidenceSnapshot(
+                    provider=self.name,
+                    source_type="ratios",
+                    status="fresh",
+                    label="FMP ratios and financial scores",
+                    payload=self._normalize_ratios(ticker, payloads["ratios"], payloads["key-metrics"], payloads["financial-scores"]),
+                    url=f"{BASE_URL}/ratios",
+                )
+            )
+        if "earnings" in payloads:
+            evidence.append(
+                EvidenceSnapshot(
+                    provider=self.name,
+                    source_type="earnings",
+                    status="fresh",
+                    label="FMP earnings",
+                    payload=self._normalize_earnings(ticker, payloads["earnings"]),
+                    url=f"{BASE_URL}/earnings",
+                )
+            )
+        return evidence + errors
 
     def _request(self, endpoint: str, ticker: str, limit: int | None = None) -> Any:
         params: dict[str, Any] = {"symbol": ticker, "apikey": self.api_key}

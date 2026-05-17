@@ -32,7 +32,7 @@ def build_framework_prompt(
             "status": item.status,
             "label": item.label,
             "url": item.url,
-            "payload": item.payload,
+            "payload": _compact_value(item.payload),
             "warnings": item.warnings,
             "retrieved_at": item.retrieved_at,
         }
@@ -55,3 +55,26 @@ def build_framework_prompt(
             f"Evidence: {json.dumps(evidence_payload)}",
         ]
     )
+
+
+def _compact_value(value, depth: int = 0):
+    if depth >= 2:
+        if isinstance(value, str):
+            return value[:240]
+        return value
+    if isinstance(value, dict):
+        compacted = {}
+        for index, (key, item) in enumerate(value.items()):
+            if index >= 8:
+                compacted["_truncated_keys"] = len(value) - 8
+                break
+            compacted[key] = _compact_value(item, depth + 1)
+        return compacted
+    if isinstance(value, list):
+        compacted_list = [_compact_value(item, depth + 1) for item in value[:3]]
+        if len(value) > 3:
+            compacted_list.append({"_truncated_items": len(value) - 3})
+        return compacted_list
+    if isinstance(value, str):
+        return value[:240]
+    return value

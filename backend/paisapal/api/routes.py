@@ -31,6 +31,7 @@ from paisapal.db.repository import (
     create_analysis_run,
     create_import_batch,
     get_analysis_run,
+    get_latest_analysis_run_for_ticker,
     get_history,
     get_latest_report,
     get_latest_watchlist,
@@ -105,6 +106,14 @@ def analysis_run(run_id: int, session: Session = Depends(get_session)) -> Analys
     return _run_response(run)
 
 
+@router.get("/analysis-runs/latest/{ticker}", response_model=AnalysisRunResponse)
+def latest_analysis_run_for_ticker(ticker: str, session: Session = Depends(get_session)) -> AnalysisRunResponse:
+    run = get_latest_analysis_run_for_ticker(session, ticker)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Analysis run not found")
+    return _run_response(run)
+
+
 @router.post("/analysis-runs/{run_id}/run-mock", response_model=AnalysisRunResponse)
 def run_mock_analysis(run_id: int, session: Session = Depends(get_session)) -> AnalysisRunResponse:
     run = get_analysis_run(session, run_id)
@@ -154,11 +163,15 @@ def provider_status() -> list[ProviderStatusResponse]:
         "polygon": bool(os.getenv("POLYGON_API_KEY")),
         "alpha_vantage": bool(os.getenv("ALPHA_VANTAGE_API_KEY")),
         "fmp": bool(os.getenv("FMP_API_KEY")),
+        "tiingo": bool(os.getenv("TIINGO_API_KEY")),
+        "finnhub": bool(os.getenv("FINNHUB_API_KEY")),
+        "simfin": bool(os.getenv("SIMFIN_API_KEY")),
+        "fred": bool(os.getenv("FRED_API_KEY")),
     }
     free_provider_config = {
         "yahoo": market_data_mode == "free",
         "sec_edgar": market_data_mode == "free",
-        "stooq": market_data_mode == "free" and bool(os.getenv("STOOQ_API_KEY")),
+        "stooq": market_data_mode == "free",
     }
     has_market_data = any(free_provider_config.values()) or any(provider_config.values())
     live_ready = ai_configured and has_market_data
@@ -238,6 +251,34 @@ def provider_status() -> list[ProviderStatusResponse]:
             provider="fmp",
             configured=provider_config["fmp"],
             role="fundamentals",
+            live_ready=live_ready,
+            message=message,
+        ),
+        ProviderStatusResponse(
+            provider="tiingo",
+            configured=provider_config["tiingo"],
+            role="market_data",
+            live_ready=live_ready,
+            message=message,
+        ),
+        ProviderStatusResponse(
+            provider="finnhub",
+            configured=provider_config["finnhub"],
+            role="market_data",
+            live_ready=live_ready,
+            message=message,
+        ),
+        ProviderStatusResponse(
+            provider="simfin",
+            configured=provider_config["simfin"],
+            role="fundamentals",
+            live_ready=live_ready,
+            message=message,
+        ),
+        ProviderStatusResponse(
+            provider="fred",
+            configured=provider_config["fred"],
+            role="macro",
             live_ready=live_ready,
             message=message,
         ),
@@ -323,13 +364,32 @@ def ticker_report(ticker: str, session: Session = Depends(get_session)) -> Ticke
     if snapshot is None:
         raise HTTPException(status_code=404, detail="Ticker not found")
     report = json.loads(snapshot.report_json)
+    source_coverage_input = {"source_summary": _source_summary_rows(snapshot, report)}
     return TickerReportResponse(
         ticker=snapshot.ticker,
         report=report,
         markdown_report=snapshot.markdown_report,
         created_at=snapshot.created_at.isoformat(),
-        source_coverage=derive_source_coverage(report),
+        source_coverage=derive_source_coverage(source_coverage_input),
     )
+
+
+def _source_summary_rows(snapshot, report: dict) -> list[dict]:
+    job = getattr(snapshot, "job", None)
+    sources = getattr(job, "sources", None) if job is not None else None
+    if sources:
+        return [
+            {
+                "provider": source.provider,
+                "source_type": source.source_type,
+                "status": source.status,
+                "label": source.label,
+                "url": source.url,
+                "warnings": json.loads(source.warnings_json or "[]"),
+            }
+            for source in sources
+        ]
+    return report.get("source_summary", [])
 
 
 @router.get("/tickers/{ticker}/history", response_model=list[HistoryRowResponse])

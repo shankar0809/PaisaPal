@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchTickerReport } from "../api/client";
+import { AnalysisSteps } from "../components/AnalysisSteps";
 import { FrameworkSourceCoverage } from "../components/FrameworkSourceCoverage";
 import { ReportSection } from "../components/ReportSection";
 import { SourceSummary } from "../components/SourceSummary";
@@ -36,6 +37,7 @@ export function TickerDetailPage({ ticker }: TickerDetailPageProps) {
   if (!report) return <main className="page"><div className="panel emptyState">Loading report...</div></main>;
 
   const dataWarnings = report.report.data_warnings ?? [];
+  const analysisSteps = report.report.analysis_steps ?? [];
   const markdownReport = report.markdown_report || "No generated report was stored for this ticker.";
 
   return (
@@ -53,6 +55,10 @@ export function TickerDetailPage({ ticker }: TickerDetailPageProps) {
 
       <ReportSection title="Framework Source Coverage">
         <FrameworkSourceCoverage coverage={report.source_coverage ?? []} />
+      </ReportSection>
+
+      <ReportSection title="Analysis Step Results">
+        <AnalysisSteps steps={analysisSteps} />
       </ReportSection>
 
       {dataWarnings.length > 0 && (

@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import csv
-import os
 from io import StringIO
 from typing import Any
 
 import httpx
-
 from paisapal.providers.base import EvidenceSnapshot, redact_url_secrets
 
 BASE_URL = "https://stooq.com/q/d/l/"
@@ -15,31 +13,15 @@ BASE_URL = "https://stooq.com/q/d/l/"
 class StooqProvider:
     name = "stooq"
 
-    def __init__(
-        self,
-        api_key: str | None = None,
-        http_client: Any | None = None,
-        timeout: float = 10.0,
-    ) -> None:
-        self.api_key = api_key if api_key is not None else os.getenv("STOOQ_API_KEY")
+    def __init__(self, http_client: Any | None = None, timeout: float = 10.0) -> None:
         self.http_client = http_client or httpx
         self.timeout = timeout
 
     def collect(self, ticker: str) -> list[EvidenceSnapshot]:
-        if not self.api_key:
-            return [
-                EvidenceSnapshot(
-                    provider=self.name,
-                    source_type="provider_status",
-                    status="missing",
-                    label="Stooq daily CSV",
-                    payload={"ticker": ticker.upper()},
-                    url=BASE_URL,
-                    warnings=["Stooq CSV API key is not configured"],
-                )
-            ]
         try:
-            rows = self._request(ticker)
+            rows = self._request_direct_csv(ticker)
+            if not rows:
+                rows = self._request_via_datareader(ticker)
             if not rows:
                 return [self._error_snapshot(ticker, "Stooq response did not include rows")]
         except Exception as exc:
@@ -84,10 +66,11 @@ class StooqProvider:
             ),
         ]
 
-    def _request(self, ticker: str) -> list[dict[str, Any]]:
+    def _request_direct_csv(self, ticker: str) -> list[dict[str, Any]]:
+        stooq_symbol = get_stooq_symbol(ticker)
         response = self.http_client.get(
             BASE_URL,
-            params={"s": f"{ticker.lower()}.us", "i": "d", "apikey": self.api_key},
+            params={"s": stooq_symbol, "i": "d"},
             timeout=self.timeout,
         )
         response.raise_for_status()
@@ -108,6 +91,23 @@ class StooqProvider:
             )
         return rows
 
+    def _request_via_datareader(self, ticker: str) -> list[dict[str, Any]]:
+        try:
+            from pandas_datareader import data as pdr
+        except ImportError:
+            return []
+
+        candidates = [ticker.upper(), get_stooq_symbol(ticker)]
+        for symbol in candidates:
+            try:
+                frame = pdr.DataReader(symbol, "stooq")
+            except Exception:
+                continue
+            rows = _frame_to_rows(frame)
+            if rows:
+                return rows
+        return []
+
     def _error_snapshot(self, ticker: str, warning: str) -> EvidenceSnapshot:
         return EvidenceSnapshot(
             provider=self.name,
@@ -118,6 +118,39 @@ class StooqProvider:
             url=BASE_URL,
             warnings=[redact_url_secrets(warning)],
         )
+
+
+def get_stooq_symbol(symbol: str) -> str:
+    symbol = symbol.lower().strip()
+    if "." not in symbol:
+        symbol = f"{symbol}.us"
+    return symbol
+
+
+def _frame_to_rows(frame: Any) -> list[dict[str, Any]]:
+    if not hasattr(frame, "sort_index") or not hasattr(frame, "reset_index"):
+        return []
+    try:
+        from pandas import DataFrame
+    except ImportError:
+        return []
+    if not isinstance(frame, DataFrame):
+        return []
+    ordered = frame.sort_index().reset_index()
+    rows = []
+    for _, row in ordered.iterrows():
+        date_value = row.get("Date")
+        rows.append(
+            {
+                "date": date_value.isoformat() if hasattr(date_value, "isoformat") else date_value,
+                "open": _float_or_none(row.get("Open")),
+                "high": _float_or_none(row.get("High")),
+                "low": _float_or_none(row.get("Low")),
+                "close": _float_or_none(row.get("Close")),
+                "volume": _int_or_none(row.get("Volume")),
+            }
+        )
+    return rows
 
 
 def _moving_average(values: list[float], window: int) -> float | None:

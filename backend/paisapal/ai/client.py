@@ -51,7 +51,7 @@ class OllamaAnalysisClient:
         base_url: str | None = None,
         model: str | None = None,
         max_retries: int = 1,
-        timeout: float = 300,
+        timeout: float = 900,
     ) -> None:
         self.http_client = http_client or httpx.Client()
         self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")).rstrip("/")
@@ -79,7 +79,7 @@ class OllamaAnalysisClient:
             except httpx.RequestError as exc:
                 raise RuntimeError(
                     "Ollama is not reachable. Start Ollama and confirm "
-                    f"{self.base_url}/api/generate is available."
+                    f"{self.base_url}/api/generate is available. Details: {exc}"
                 ) from exc
 
             try:

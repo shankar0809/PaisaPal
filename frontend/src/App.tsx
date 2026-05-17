@@ -48,7 +48,7 @@ export function App() {
           </a>
           <a className={route.name === "history" ? "active" : ""} href="#/history">
             <History size={18} />
-            History
+            Status
           </a>
         </nav>
       </aside>

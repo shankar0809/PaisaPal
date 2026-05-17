@@ -129,6 +129,15 @@ def test_ollama_analysis_client_validates_json_response():
     assert fake_http.calls[0]["json"]["stream"] is False
 
 
+def test_ollama_analysis_client_uses_extended_timeout_for_long_reports():
+    fake_http = FakeHttpClient([{"response": VALID_REPORT_JSON}])
+    client = OllamaAnalysisClient(http_client=fake_http, model="qwen2.5:7b-instruct")
+
+    client.analyze("prompt")
+
+    assert fake_http.calls[0]["timeout"] == 900
+
+
 def test_ollama_analysis_client_retries_after_invalid_json_output():
     fake_http = FakeHttpClient([{"response": "not json"}, {"response": VALID_REPORT_JSON}])
     client = OllamaAnalysisClient(http_client=fake_http, model="qwen2.5:7b-instruct", max_retries=1)

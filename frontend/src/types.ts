@@ -75,6 +75,19 @@ export type TickerReport = {
     options_flow_rating?: string;
     data_warnings?: string[];
     source_summary?: SourceSummaryItem[];
+    analysis_steps?: Array<{
+      section: string;
+      status: "covered" | "partial" | "missing";
+      summary: string;
+      results: Record<string, unknown>;
+      sources: Array<{
+        provider: string;
+        source_type: string;
+        status: string;
+        label: string;
+      }>;
+      warnings: string[];
+    }>;
     input?: Record<string, unknown>;
     analysis?: Record<string, unknown>;
   };

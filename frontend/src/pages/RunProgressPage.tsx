@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchAnalysisRun, runAnalysis } from "../api/client";
 import { JobStatusTable } from "../components/JobStatusTable";
+import { RunStatusPanel } from "../components/RunStatusPanel";
 import type { AnalysisRun } from "../types";
 
 type RunProgressPageProps = {
@@ -27,6 +28,27 @@ export function RunProgressPage({ runId }: RunProgressPageProps) {
       cancelled = true;
     };
   }, [runId]);
+
+  useEffect(() => {
+    if (!running) return undefined;
+    let cancelled = false;
+    async function pollRun() {
+      try {
+        const loadedRun = await fetchAnalysisRun(runId);
+        if (!cancelled) setRun(loadedRun);
+      } catch {
+        // Keep the in-flight run request as the source of truth for terminal errors.
+      }
+    }
+    pollRun();
+    const intervalId = window.setInterval(async () => {
+      await pollRun();
+    }, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [runId, running]);
 
   async function onRunAnalysis() {
     setError("");
@@ -67,10 +89,11 @@ export function RunProgressPage({ runId }: RunProgressPageProps) {
       </header>
       <div className="actions">
         <button type="button" onClick={onRunAnalysis} disabled={running}>
-          Run Analysis
+          {running ? "Running..." : "Run Analysis"}
         </button>
       </div>
       {error && <p role="alert">{error}</p>}
+      <RunStatusPanel run={run} running={running} />
       <JobStatusTable jobs={run.jobs} onOpenTicker={onOpenTicker} />
     </main>
   );

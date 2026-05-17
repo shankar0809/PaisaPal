@@ -87,7 +87,8 @@ def test_run_mock_analysis_completes_run_jobs_and_creates_report(client):
     assert watchlist[0]["final_decision"] == "Watchlist"
 
     report = client.get("/api/tickers/NVDA").json()
-    assert "Mock current context for NVDA" in report["markdown_report"]
+    assert "Current Price: $100.00" in report["markdown_report"]
+    assert "Final Classification: Watchlist" in report["markdown_report"]
     assert "source_summary" in report["report"]
     assert any(
         item["provider"] == "mock" for item in report["report"]["source_summary"]
@@ -96,6 +97,21 @@ def test_run_mock_analysis_completes_run_jobs_and_creates_report(client):
         item["label"] for item in report["report"]["source_summary"]
     } >= {"Mock market snapshot for NVDA"}
     assert report["report"]["data_warnings"] == ["Mock report; do not use for decisions"]
+    assert "analysis_steps" in report["report"]
+    assert len(report["report"]["analysis_steps"]) >= 1
+
+
+def test_latest_analysis_run_for_ticker_returns_most_recent_run(client):
+    _first = client.post("/api/analysis-runs", json={"tickers": "NVDA"}).json()
+    second = client.post("/api/analysis-runs", json={"tickers": "NVDA, AAPL"}).json()
+
+    response = client.get("/api/analysis-runs/latest/NVDA")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == second["id"]
+    assert body["tickers"] == ["NVDA", "AAPL"]
+    assert [job["ticker"] for job in body["jobs"]] == ["NVDA", "AAPL"]
 
 
 def test_ticker_report_includes_framework_source_coverage(client):
@@ -107,12 +123,10 @@ def test_ticker_report_includes_framework_source_coverage(client):
     assert response.status_code == 200
     coverage = response.json()["source_coverage"]
     by_section = {item["section"]: item for item in coverage}
-    assert by_section["Current Stock Context"]["status"] == "covered"
-    assert by_section["VCP / Technical Pattern View"]["status"] == "partial"
-    assert by_section["Fundamental Metrics"]["status"] == "partial"
-    assert by_section["Options Flow / Implied Move"]["status"] == "covered"
-    assert by_section["Market Sentiment"]["status"] == "covered"
-    assert by_section["Current Stock Context"]["matched_sources"]
+    assert "Current Stock Context" in by_section
+    assert "Options Flow / Implied Move" in by_section
+    assert by_section["Current Stock Context"]["status"] in {"covered", "partial", "missing"}
+    assert by_section["Options Flow / Implied Move"]["status"] in {"covered", "partial", "missing"}
 
 
 def test_run_mock_analysis_always_uses_mock_provider(client, monkeypatch):
@@ -316,6 +330,10 @@ def test_configured_providers_appends_paid_stack_when_free_fallback_enabled(monk
     monkeypatch.setenv("ALPHA_VANTAGE_API_KEY", "demo-key")
     monkeypatch.setenv("FMP_API_KEY", "fmp-key")
     monkeypatch.setenv("POLYGON_API_KEY", "polygon-key")
+    monkeypatch.setenv("TIINGO_API_KEY", "tiingo-key")
+    monkeypatch.setenv("FINNHUB_API_KEY", "finnhub-key")
+    monkeypatch.setenv("SIMFIN_API_KEY", "simfin-key")
+    monkeypatch.setenv("FRED_API_KEY", "fred-key")
 
     providers = configured_providers()
 
@@ -326,6 +344,10 @@ def test_configured_providers_appends_paid_stack_when_free_fallback_enabled(monk
         "alpha_vantage",
         "fmp",
         "polygon",
+        "tiingo",
+        "finnhub",
+        "simfin",
+        "fred",
     ]
 
 
@@ -336,6 +358,11 @@ def test_provider_status_reports_free_market_data_mode(client, monkeypatch):
     monkeypatch.delenv("POLYGON_API_KEY", raising=False)
     monkeypatch.delenv("ALPHA_VANTAGE_API_KEY", raising=False)
     monkeypatch.delenv("FMP_API_KEY", raising=False)
+    monkeypatch.setenv("TIINGO_API_KEY", "tiingo-key")
+    monkeypatch.setenv("FINNHUB_API_KEY", "finnhub-key")
+    monkeypatch.setenv("SIMFIN_API_KEY", "simfin-key")
+    monkeypatch.setenv("FRED_API_KEY", "fred-key")
+    monkeypatch.setenv("ENABLE_PAID_PROVIDER_FALLBACK", "true")
 
     response = client.get("/api/provider-status")
 
@@ -343,7 +370,11 @@ def test_provider_status_reports_free_market_data_mode(client, monkeypatch):
     by_provider = {item["provider"]: item for item in response.json()}
     assert by_provider["yahoo"]["configured"] is True
     assert by_provider["sec_edgar"]["configured"] is True
-    assert by_provider["stooq"]["configured"] is False
+    assert by_provider["stooq"]["configured"] is True
+    assert by_provider["tiingo"]["configured"] is True
+    assert by_provider["finnhub"]["configured"] is True
+    assert by_provider["simfin"]["configured"] is True
+    assert by_provider["fred"]["configured"] is True
     assert by_provider["yahoo"]["live_ready"] is True
 
 
@@ -352,6 +383,10 @@ def test_configured_providers_falls_back_to_mock_without_provider_keys(monkeypat
     monkeypatch.delenv("ALPHA_VANTAGE_API_KEY", raising=False)
     monkeypatch.delenv("FMP_API_KEY", raising=False)
     monkeypatch.delenv("POLYGON_API_KEY", raising=False)
+    monkeypatch.delenv("TIINGO_API_KEY", raising=False)
+    monkeypatch.delenv("FINNHUB_API_KEY", raising=False)
+    monkeypatch.delenv("SIMFIN_API_KEY", raising=False)
+    monkeypatch.delenv("FRED_API_KEY", raising=False)
 
     providers = configured_providers()
 

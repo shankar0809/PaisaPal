@@ -155,6 +155,126 @@ th {
   overflow-x: auto;
 }
 
+.runStatusPanel {
+  align-items: center;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(160px, 1fr) auto auto;
+}
+
+.runStatusPanel h2 {
+  font-size: 16px;
+  margin: 0 0 4px;
+}
+
+.statusLine {
+  color: #5b6572;
+  margin: 0;
+}
+
+.statusMetric {
+  background: #eef2f7;
+  border-radius: 999px;
+  color: #384556;
+  display: inline-flex;
+  font-weight: 700;
+  margin-left: 8px;
+  padding: 5px 10px;
+}
+
+.errorMetric {
+  background: #fde2e1;
+  color: #94312d;
+}
+
+.statusDot {
+  background: #aeb8c3;
+  border-radius: 999px;
+  display: inline-block;
+  height: 10px;
+  margin-right: 8px;
+  width: 10px;
+}
+
+.statusDot.active {
+  background: #1976d2;
+}
+
+.statusDetailGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 16px 0;
+}
+
+.statusMetricLabel {
+  color: #5b6572;
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.analysisSteps {
+  display: grid;
+  gap: 10px;
+}
+
+.analysisStep {
+  border: 1px solid #dbe3ea;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.analysisStep summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  list-style: none;
+}
+
+.analysisStep summary::-webkit-details-marker {
+  display: none;
+}
+
+.analysisStepBody {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.analysisStepGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.stepStatus {
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 8px;
+  text-transform: capitalize;
+}
+
+.stepStatus.covered {
+  background: #dff7e8;
+  color: #17623a;
+}
+
+.stepStatus.partial {
+  background: #fff0d9;
+  color: #8a5a00;
+}
+
+.stepStatus.missing {
+  background: #fde2e1;
+  color: #94312d;
+}
+
 .clickableRow {
   cursor: pointer;
 }
@@ -251,5 +371,10 @@ dd {
 
   .nav {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .runStatusPanel {
+    align-items: start;
+    grid-template-columns: 1fr;
   }
 }

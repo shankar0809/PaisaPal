@@ -53,43 +53,61 @@ class PolygonProvider:
             ("options_snapshot", f"/v3/snapshot/options/{ticker}", {"limit": 20}),
         ]
         payloads: dict[str, Any] = {}
+        errors: list[EvidenceSnapshot] = []
         for endpoint, path, params in requests:
             try:
                 payload = self._request(path, params)
             except Exception as exc:
-                return [self._error_snapshot(ticker, endpoint, path, str(exc))]
+                error = self._error_snapshot(ticker, endpoint, path, str(exc))
+                if not payloads:
+                    return [error]
+                errors.append(error)
+                continue
 
             provider_warning = self._provider_warning(payload)
             if provider_warning:
-                return [self._error_snapshot(ticker, endpoint, path, provider_warning)]
+                error = self._error_snapshot(ticker, endpoint, path, provider_warning)
+                if not payloads:
+                    return [error]
+                errors.append(error)
+                continue
             payloads[endpoint] = payload
 
-        return [
-            EvidenceSnapshot(
-                provider=self.name,
-                source_type="market",
-                status="fresh",
-                label="Polygon stock snapshot",
-                payload=self._normalize_market(ticker, payloads["ticker_details"], payloads["stock_snapshot"]),
-                url=f"{BASE_URL}/v3/snapshot",
-            ),
-            EvidenceSnapshot(
-                provider=self.name,
-                source_type="technicals",
-                status="fresh",
-                label="Polygon daily aggregates",
-                payload=self._normalize_technicals(ticker, payloads["daily_aggregates"]),
-                url=f"{BASE_URL}/v2/aggs/ticker/{ticker}/range/1/day/{start_date.isoformat()}/{self.end_date.isoformat()}",
-            ),
-            EvidenceSnapshot(
-                provider=self.name,
-                source_type="options",
-                status="fresh",
-                label="Polygon options snapshot",
-                payload=self._normalize_options(ticker, payloads["options_snapshot"]),
-                url=f"{BASE_URL}/v3/snapshot/options/{ticker}",
-            ),
-        ]
+        evidence: list[EvidenceSnapshot] = []
+        if "ticker_details" in payloads:
+            evidence.append(
+                EvidenceSnapshot(
+                    provider=self.name,
+                    source_type="market",
+                    status="fresh",
+                    label="Polygon stock snapshot",
+                    payload=self._normalize_market(ticker, payloads["ticker_details"], payloads.get("stock_snapshot", {})),
+                    url=f"{BASE_URL}/v3/snapshot",
+                )
+            )
+        if "daily_aggregates" in payloads:
+            evidence.append(
+                EvidenceSnapshot(
+                    provider=self.name,
+                    source_type="technicals",
+                    status="fresh",
+                    label="Polygon daily aggregates",
+                    payload=self._normalize_technicals(ticker, payloads["daily_aggregates"]),
+                    url=f"{BASE_URL}/v2/aggs/ticker/{ticker}/range/1/day/{start_date.isoformat()}/{self.end_date.isoformat()}",
+                )
+            )
+        if "options_snapshot" in payloads:
+            evidence.append(
+                EvidenceSnapshot(
+                    provider=self.name,
+                    source_type="options",
+                    status="fresh",
+                    label="Polygon options snapshot",
+                    payload=self._normalize_options(ticker, payloads["options_snapshot"]),
+                    url=f"{BASE_URL}/v3/snapshot/options/{ticker}",
+                )
+            )
+        return evidence + errors
 
     def _request(self, path: str, params: dict[str, Any]) -> Any:
         request_params = {**params, "apiKey": self.api_key}

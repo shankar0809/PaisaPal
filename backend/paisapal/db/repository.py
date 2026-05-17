@@ -107,6 +107,17 @@ def get_analysis_run(session: Session, run_id: int) -> AnalysisRun | None:
     return session.get(AnalysisRun, run_id)
 
 
+def get_latest_analysis_run_for_ticker(session: Session, ticker: str) -> AnalysisRun | None:
+    normalized_ticker = ticker.upper()
+    return session.scalar(
+        select(AnalysisRun)
+        .join(AnalysisJob)
+        .where(AnalysisJob.ticker == normalized_ticker)
+        .order_by(AnalysisRun.created_at.desc())
+        .limit(1)
+    )
+
+
 def update_analysis_run_status(
     session: Session,
     run_id: int,
